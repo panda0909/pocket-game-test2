@@ -1,0 +1,19 @@
+# Godot 4+ 匯入快取（可由專案重新產生，不進版控）
+.godot/
+/android/
+
+# 匯出產物
+/build/
+/export/
+
+# 資產處理用的 Python 虛擬環境
+tools/.venv/
+__pycache__/
+
+# 臨時診斷腳本（開發過程中用完即刪）
+_*.gd
+_*.tscn
+_*.uid
+
+# macOS
+.DS_Store
