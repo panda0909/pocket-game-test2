@@ -9,13 +9,20 @@ const TITLE := 0
 const PLAYING := 1
 const GAME_OVER := 2
 const CLEARED := 3
+const SELECT := 4
 
 
 static func next(state: int, event: String, lives_left: int) -> int:
 	match state:
 		TITLE:
 			if event == "start":
-				return PLAYING
+				return SELECT
+		SELECT:
+			match event:
+				"confirm":
+					return PLAYING
+				"back":
+					return TITLE
 		PLAYING:
 			match event:
 				"died":
@@ -28,6 +35,8 @@ static func next(state: int, event: String, lives_left: int) -> int:
 	return state
 
 
+## 只有遊玩中才讀玩家的移動輸入。選角畫面要吃走左右鍵，
+## 不然主角會在背景裡跟著跑。
 static func accepts_input(state: int) -> bool:
 	return state == PLAYING
 

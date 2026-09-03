@@ -28,6 +28,8 @@ func _ready() -> void:
 	await _check_milk_lands_within_reach()
 	await _check_stomping_actually_kills()
 	await _check_side_contact_hurts_instead()
+	await _check_every_character_is_selectable()
+	await _check_select_arrows_cycle()
 
 	print("---")
 	print("通過 %d　失敗 %d" % [_passed, _failed])
@@ -57,21 +59,88 @@ func _check_space_key_starts_game() -> void:
 	var main := await _make_main()
 	_expect(main.flow_state == Flow.TITLE, "一開始在標題畫面")
 
+	await _tap(KEY_SPACE)
+	_expect(main.flow_state == Flow.SELECT, "按空白鍵進入選角畫面",
+		"flow_state=%d" % main.flow_state)
+	_expect(main.get_node("CharacterSelect").visible, "選角畫面看得到")
+
+	await _tap(KEY_SPACE)
+	_expect(main.flow_state == Flow.PLAYING, "在選角畫面按空白鍵開始遊戲",
+		"flow_state=%d" % main.flow_state)
+	_expect(not main.get_node("CharacterSelect").visible, "開始後選角畫面收起來")
+	main.queue_free()
+	await get_tree().process_frame
+
+
+## 推一次真的按鍵事件（按下再放開）。
+func _tap(code: int) -> void:
 	var press := InputEventKey.new()
-	press.physical_keycode = KEY_SPACE
+	press.physical_keycode = code
 	press.pressed = true
 	Input.parse_input_event(press)
 	await get_tree().process_frame
 	await get_tree().process_frame
-
-	_expect(main.flow_state == Flow.PLAYING, "按空白鍵開始遊戲",
-		"flow_state=%d" % main.flow_state)
-
 	var release := InputEventKey.new()
-	release.physical_keycode = KEY_SPACE
+	release.physical_keycode = code
 	release.pressed = false
 	Input.parse_input_event(release)
 	await get_tree().process_frame
+
+
+## 三隻都選得到，而且玩家的貼圖真的換掉了。
+## 光測 Roster 只證明清單對，不證明選了之後畫面上真的換人。
+func _check_every_character_is_selectable() -> void:
+	var main := await _make_main()
+	await _tap(KEY_SPACE)
+	_expect(main.flow_state == Flow.SELECT, "進到選角畫面")
+
+	var player: Player = main.get_node("Player")
+	var sprite: Sprite2D = player.get_node("Sprite")
+	var seen: Dictionary = {}
+
+	for i in Roster.COUNT:
+		main.character_index = i
+		main.get_node("CharacterSelect").show_index(i)
+		player.set_character(i)
+		await get_tree().process_frame
+		var path: String = sprite.texture.resource_path
+		_expect(path == Roster.texture_path(i),
+			"選 %s 時主角貼圖換成對的圖" % Roster.name_of(i),
+			"實際是 %s" % path)
+		seen[path] = true
+
+	_expect(seen.size() == Roster.COUNT, "三隻用的是三張不同的圖",
+		"只出現 %d 張" % seen.size())
+	main.queue_free()
+	await get_tree().process_frame
+
+
+## 選角畫面的左右鍵會換人，走到頭會繞回來。
+func _check_select_arrows_cycle() -> void:
+	var main := await _make_main()
+	await _tap(KEY_SPACE)
+	var start: int = main.character_index
+
+	await _tap(KEY_RIGHT)
+	_expect(main.character_index == Roster.cycle(start, 1),
+		"按右鍵換到下一隻", "index=%d" % main.character_index)
+
+	await _tap(KEY_LEFT)
+	_expect(main.character_index == start,
+		"按左鍵換回上一隻", "index=%d" % main.character_index)
+
+	# 從第一隻往左應該繞到最後一隻
+	main.character_index = 0
+	await _tap(KEY_LEFT)
+	_expect(main.character_index == Roster.COUNT - 1,
+		"從第一隻往左會繞到最後一隻", "index=%d" % main.character_index)
+
+	# 選角時計時不能跑
+	var before: float = main.stats.time_left
+	for i in 20:
+		await get_tree().process_frame
+	_expect(is_equal_approx(main.stats.time_left, before),
+		"選角時計時停住", "少了 %.2f 秒" % (before - main.stats.time_left))
 	main.queue_free()
 	await get_tree().process_frame
 
@@ -312,7 +381,7 @@ func _check_scoring_and_flow() -> void:
 
 	main.begin_game()
 	await get_tree().process_frame
-	_expect(main.flow_state == Flow.PLAYING, "開始遊戲進入遊玩狀態",
+	_expect(main.flow_state == Flow.PLAYING, "begin_game 會跳過選角直接開始",
 		"flow_state=%d" % main.flow_state)
 
 	main.get_node("Player").goal_reached.emit()

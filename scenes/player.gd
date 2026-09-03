@@ -36,6 +36,7 @@ const IDLE_CYCLE_SPEED := 3.9
 
 var state := PlayerState.new()
 var control_enabled := true
+var character_index := Roster.DEFAULT_INDEX
 
 var _timers := PlayerPhysics.new_timers()
 var _facing := 1
@@ -51,8 +52,17 @@ var _standing_pipe := ""
 @onready var _camera: Camera2D = $Camera
 
 
+## 換主角貼圖。碰撞箱與物理參數三隻共用，所以這裡只動 texture——
+## 這就是「純換皮」的全部內容，也是關卡幾何驗收不必重跑三遍的原因。
+func set_character(index: int) -> void:
+	character_index = Roster.clamp_index(index)
+	if _sprite != null:
+		_sprite.texture = load(Roster.texture_path(character_index))
+
+
 func _ready() -> void:
 	add_to_group("player")
+	set_character(character_index)
 	$TouchBox.area_entered.connect(_on_area_entered)
 	_apply_size()
 

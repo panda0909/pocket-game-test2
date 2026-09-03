@@ -16,6 +16,9 @@ const COIN_POP_TIME := 0.45
 
 var stats := RunStats.new()
 var flow_state := Flow.TITLE
+## 選到第幾隻主角。整局都用同一隻，死亡重生不會換人；
+## 回到標題時保留上次的選擇當游標起點。
+var character_index := Roster.DEFAULT_INDEX
 
 var _map: LevelMap
 var _level_path := MAIN_LEVEL
@@ -29,6 +32,7 @@ var _death_pending := false
 @onready var _entities: Node2D = $Entities
 @onready var _player: Player = $Player
 @onready var _hud: HUD = $HUD
+@onready var _select: CharacterSelect = $CharacterSelect
 
 
 func _ready() -> void:
@@ -36,6 +40,9 @@ func _ready() -> void:
 		_level_path = "res://levels/dev.txt"
 	_load_level(_level_path)
 	_connect_player()
+	_select.moved.connect(_on_select_moved)
+	_select.confirmed.connect(_on_select_confirmed)
+	_select.cancelled.connect(_on_select_cancelled)
 	_enter_state(Flow.TITLE)
 
 
@@ -55,6 +62,7 @@ func _load_level(path: String, spawn_override := Vector2.INF) -> void:
 	var start: Vector2 = spawn_override if spawn_override.is_finite() \
 		else result["spawn_position"]
 	_player.respawn_at(start)
+	_player.set_character(character_index)
 	_player.set_camera_bounds(result["level_size"])
 	_connect_level_nodes()
 
@@ -233,6 +241,10 @@ func _physics_process(_delta: float) -> void:
 ## --- 流程 ---
 
 func _unhandled_input(event: InputEvent) -> void:
+	# 選角畫面要吃走左右鍵，所以它先於 jump 的判斷處理。
+	if flow_state == Flow.SELECT:
+		_select.handle_action(event)
+		return
 	if not event.is_action_pressed("jump"):
 		return
 	match flow_state:
@@ -240,6 +252,20 @@ func _unhandled_input(event: InputEvent) -> void:
 			_advance("start")
 		Flow.GAME_OVER, Flow.CLEARED:
 			_advance("restart")
+
+
+func _on_select_moved(direction: int) -> void:
+	character_index = Roster.cycle(character_index, direction)
+	_select.show_index(character_index)
+
+
+func _on_select_confirmed() -> void:
+	_player.set_character(character_index)
+	_advance("confirm")
+
+
+func _on_select_cancelled() -> void:
+	_advance("back")
 
 
 func _process(delta: float) -> void:
@@ -260,11 +286,16 @@ func _advance(event: String) -> void:
 func _enter_state(state: int, event := "") -> void:
 	flow_state = state
 	_player.control_enabled = Flow.accepts_input(state)
+	_select.visible = state == Flow.SELECT
+	_hud.set_stats_visible(state != Flow.TITLE and state != Flow.SELECT)
 	match state:
 		Flow.TITLE:
 			_restart_run()
 			_hud.show_message("口袋牛牛大冒險",
 				"按空白鍵開始　　方向鍵／WASD 移動　空白鍵跳　Shift 丟金幣　↓ 進水管")
+		Flow.SELECT:
+			_hud.hide_message()
+			_select.show_index(character_index)
 		Flow.PLAYING:
 			_hud.hide_message()
 			if event == "died":
@@ -307,9 +338,19 @@ func _kill_player() -> void:
 
 # --- 開發工具用（tools/capture.gd）---
 
-func begin_game() -> void:
+## 只走到選角畫面就停，供擷圖確認。
+func begin_game_to_select() -> void:
 	if flow_state == Flow.TITLE:
 		_advance("start")
+
+
+func begin_game(index := -1) -> void:
+	if index >= 0:
+		character_index = Roster.clamp_index(index)
+	if flow_state == Flow.TITLE:
+		_advance("start")
+	if flow_state == Flow.SELECT:
+		_on_select_confirmed()
 
 
 func teleport_player(cells: int) -> void:
@@ -323,7 +364,7 @@ func debug_grant_powerup(coins: int) -> void:
 
 
 func debug_summary() -> String:
-	return "分數=%d 金幣=%d 生命=%d 時間=%d 實體=%d" % [
-		stats.score, stats.coins, stats.lives, stats.seconds_left(),
-		_entities.get_child_count(),
+	return "角色=%s 分數=%d 金幣=%d 生命=%d 時間=%d 實體=%d" % [
+		Roster.name_of(character_index), stats.score, stats.coins,
+		stats.lives, stats.seconds_left(), _entities.get_child_count(),
 	]

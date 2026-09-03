@@ -3,6 +3,7 @@ extends CanvasLayer
 
 ## 分數列與置中訊息。它只顯示，不決定任何事——所有狀態都由 Main 推進來。
 
+@onready var _stats_row: HBoxContainer = $Top
 @onready var _score: Label = $Top/Score
 @onready var _coins: Label = $Top/Coins
 @onready var _lives: Label = $Top/Lives
@@ -22,6 +23,12 @@ func update_stats(stats: RunStats, is_big: bool) -> void:
 	# 剩不到 30 秒轉紅，這是玩家唯一會注意到時間的時刻
 	_time.modulate = Color(1, 0.45, 0.4) if stats.seconds_left() <= 30 \
 		else Color(1, 1, 1)
+
+
+## 上方那排數值只在真的在玩的時候有意義。標題與選角畫面顯示
+## 「分數 000000　時間 300」只是雜訊，選角畫面還會和角色圖疊在一起。
+func set_stats_visible(visible_now: bool) -> void:
+	_stats_row.visible = visible_now
 
 
 func show_message(title: String, subtitle: String) -> void:

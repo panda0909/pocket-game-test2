@@ -1,7 +1,17 @@
 extends GutTest
 
-func test_start_moves_title_to_playing() -> void:
-	assert_eq(Flow.next(Flow.TITLE, "start", 3), Flow.PLAYING)
+func test_start_moves_title_to_character_select() -> void:
+	assert_eq(Flow.next(Flow.TITLE, "start", 3), Flow.SELECT)
+
+func test_confirm_moves_select_to_playing() -> void:
+	assert_eq(Flow.next(Flow.SELECT, "confirm", 3), Flow.PLAYING)
+
+func test_select_can_go_back_to_title() -> void:
+	assert_eq(Flow.next(Flow.SELECT, "back", 3), Flow.TITLE)
+
+func test_select_ignores_gameplay_events() -> void:
+	assert_eq(Flow.next(Flow.SELECT, "died", 0), Flow.SELECT)
+	assert_eq(Flow.next(Flow.SELECT, "goal", 3), Flow.SELECT)
 
 func test_title_ignores_gameplay_events() -> void:
 	assert_eq(Flow.next(Flow.TITLE, "died", 3), Flow.TITLE)
@@ -29,9 +39,16 @@ func test_unknown_event_keeps_state() -> void:
 func test_only_playing_accepts_input() -> void:
 	assert_true(Flow.accepts_input(Flow.PLAYING))
 	assert_false(Flow.accepts_input(Flow.TITLE))
+	assert_false(Flow.accepts_input(Flow.SELECT))
 	assert_false(Flow.accepts_input(Flow.GAME_OVER))
 	assert_false(Flow.accepts_input(Flow.CLEARED))
 
+## 選角時計時不能跑，不然玩家在挑角色的時候就在扣時間。
 func test_only_playing_counts_down() -> void:
 	assert_true(Flow.counts_down(Flow.PLAYING))
+	assert_false(Flow.counts_down(Flow.SELECT))
 	assert_false(Flow.counts_down(Flow.CLEARED))
+
+func test_select_is_a_distinct_state() -> void:
+	for other in [Flow.TITLE, Flow.PLAYING, Flow.GAME_OVER, Flow.CLEARED]:
+		assert_ne(Flow.SELECT, other)

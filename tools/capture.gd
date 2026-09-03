@@ -7,9 +7,11 @@ extends Node
 ##     Godot --path . tools/capture.tscn -- <輸出路徑> <等待幀數> [模式] [X 位移格數]
 ##
 ## 模式：
-##     title  只看標題畫面（預設）
-##     game   直接開始遊戲
-##     big    開始遊戲並讓玩家先變大、帶滿彈藥，用來確認 BIG 外觀
+##     title   只看標題畫面（預設）
+##     select  停在選角畫面
+##     game    直接開始遊戲
+##     big     開始遊戲並讓玩家先變大、帶滿彈藥，用來確認 BIG 外觀
+##     bull / dino / gecko  指定主角後直接開始
 ##
 ## 第四個參數把玩家往右移動指定格數，用來逐段檢查長關卡的排版。
 ##
@@ -30,8 +32,12 @@ func _ready() -> void:
 	var main: Node = get_child(0)
 	await get_tree().process_frame
 
-	if mode != "title":
-		main.begin_game()
+	const CHARACTERS := {"bull": 0, "dino": 1, "gecko": 2}
+
+	if mode == "select":
+		main.begin_game_to_select()
+	elif mode != "title":
+		main.begin_game(CHARACTERS.get(mode, -1))
 		await get_tree().process_frame
 		if shift_cells != 0:
 			main.teleport_player(shift_cells)
@@ -42,7 +48,7 @@ func _ready() -> void:
 	for i in frames:
 		await get_tree().process_frame
 
-	if mode != "title":
+	if mode != "title" and mode != "select":
 		print("擷圖狀態 %s" % main.debug_summary())
 
 	var image := get_viewport().get_texture().get_image()
