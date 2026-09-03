@@ -18,6 +18,9 @@ var stats := RunStats.new()
 var _map: LevelMap
 var _level_path := MAIN_LEVEL
 var _spawn := Vector2.ZERO
+## 進水管前站的位置。從暗房回來時要放回這裡，玩家才不會迷失方向。
+var _return_position := Vector2.INF
+var _in_room := false
 
 @onready var _tiles: TileMapLayer = $Tiles
 @onready var _entities: Node2D = $Entities
@@ -31,17 +34,22 @@ func _ready() -> void:
 	_connect_player()
 
 
-func _load_level(path: String) -> void:
-	_map = LevelMap.load_from(path)
-	if not _map.is_valid():
-		for message in _map.errors:
+func _load_level(path: String, spawn_override := Vector2.INF) -> void:
+	var map := LevelMap.load_from(path)
+	if not map.is_valid():
+		for message in map.errors:
 			push_error("關卡 %s：%s" % [path, message])
 		return
 
+	_map = map
 	var result := LevelBuilder.build(_map, _tiles, _entities)
-	_spawn = result["spawn_position"]
-	stats = RunStats.new(_map.time_limit)
-	_player.respawn_at(_spawn)
+	# 分數與計時活在 Main，不隨關卡重建——進暗房不該把時間洗掉。
+	if not _in_room:
+		stats = RunStats.new(_map.time_limit)
+	_spawn = result["spawn_position"] if not _map.is_room else spawn_override
+	var start: Vector2 = spawn_override if spawn_override.is_finite() \
+		else result["spawn_position"]
+	_player.respawn_at(start)
 	_player.set_camera_bounds(result["level_size"])
 	_connect_level_nodes()
 
@@ -87,6 +95,8 @@ func _connect_player() -> void:
 	_player.died.connect(_on_player_died)
 	_player.milk_collected.connect(_on_milk_collected)
 	_player.throw_requested.connect(_on_throw_requested)
+	_player.pipe_entered.connect(_on_pipe_entered)
+	_player.checkpoint_reached.connect(_on_checkpoint_reached)
 
 
 func _on_coin_collected() -> void:
@@ -95,6 +105,37 @@ func _on_coin_collected() -> void:
 
 func _on_goal_reached() -> void:
 	stats.finish()
+
+
+## 進水管。暗房是另一張關卡檔，整張換掉；分數與計時延續。
+func _on_pipe_entered(target: String) -> void:
+	if target.is_empty():
+		return
+	if target == "__return__":
+		_return_to_level()
+		return
+	_return_position = _player.global_position
+	_in_room = true
+	_load_level("res://levels/%s.txt" % target, Vector2(160, 448))
+
+
+func _return_to_level() -> void:
+	if not _in_room:
+		return
+	_in_room = false
+	var back := _return_position
+	_return_position = Vector2.INF
+	# 放在原水管右邊一格，免得一回來就又踩進管口無限往返
+	_load_level(_level_path, back + Vector2(LevelBuilder.TILE, 0))
+
+
+func _on_checkpoint_reached(position: Vector2) -> void:
+	if _in_room:
+		return
+	_spawn = position
+	for node in _entities.get_children():
+		if node.is_in_group("checkpoint") and node.global_position == position:
+			node.mark_taken()
 
 
 ## 玩家按了丟金幣。條件由 ThrowRules 判定——體型不對或沒彈藥時

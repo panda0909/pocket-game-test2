@@ -17,6 +17,9 @@ const COIN_SCENE := preload("res://scenes/coin.tscn")
 const GOAL_SCENE := preload("res://scenes/goal_flag.tscn")
 const ENEMY_SCENE := preload("res://scenes/enemy.tscn")
 const BLOCK_SCENE := preload("res://scenes/question_block.tscn")
+const PLATFORM_SCENE := preload("res://scenes/moving_platform.tscn")
+const PIPE_SCENE := preload("res://scenes/pipe.tscn")
+const CHECKPOINT_SCENE := preload("res://scenes/checkpoint.tscn")
 
 ## 進 TileMapLayer 的地形。尖刺也進，但不給碰撞多邊形——它靠 Area2D 傷人，
 ## 玩家該踩得進去而不是站在上面。
@@ -149,4 +152,18 @@ static func _make_entity(entity: Dictionary) -> Node2D:
 			enemy.position = cell_bottom(cell) if type == "bear" \
 				else cell_center(cell)
 			return enemy
+		"platform_h", "platform_v":
+			var platform := PLATFORM_SCENE.instantiate()
+			platform.setup(type == "platform_v")
+			platform.position = cell_center(cell)
+			return platform
+		"pipe":
+			var pipe := PIPE_SCENE.instantiate()
+			pipe.setup(str(entity["params"].get("target", "")))
+			pipe.position = cell_center(cell)
+			return pipe
+		"checkpoint":
+			var checkpoint := CHECKPOINT_SCENE.instantiate()
+			checkpoint.position = cell_bottom(cell)
+			return checkpoint
 	return null

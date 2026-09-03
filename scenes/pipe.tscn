@@ -1,0 +1,58 @@
+[gd_scene load_steps=5 format=3]
+
+[sub_resource type="RectangleShape2D" id="body_shape"]
+size = Vector2(64, 64)
+
+[sub_resource type="RectangleShape2D" id="area_shape"]
+size = Vector2(56, 40)
+
+[sub_resource type="GDScript" id="script"]
+script/source = "extends StaticBody2D
+
+## 可進入的水管。站在管口上按 ↓ 就進去。
+##
+## 偵測用 Area2D 而不是碰撞判定：玩家站在管口上時腳底剛好在碰撞面上，
+## 用碰撞去問「有沒有站在水管上」會時有時無。
+
+const TILE := 64
+
+var target := \"\"
+
+func setup(pipe_target: String) -> void:
+	target = pipe_target
+
+func _ready() -> void:
+	add_to_group(\"pipe\")
+	var atlas := AtlasTexture.new()
+	atlas.atlas = load(\"res://assets/tiles.png\")
+	atlas.region = Rect2(TileGlossary.PIPE_ATLAS_COLUMN * TILE, 0, TILE, TILE)
+	$Sprite.texture = atlas
+	$Mouth.body_entered.connect(_on_body_entered)
+	$Mouth.body_exited.connect(_on_body_exited)
+
+func _on_body_entered(body: Node2D) -> void:
+	if body.is_in_group(\"player\"):
+		body.set_standing_pipe(target)
+
+func _on_body_exited(body: Node2D) -> void:
+	if body.is_in_group(\"player\"):
+		body.set_standing_pipe(\"\")
+"
+
+[node name="Pipe" type="StaticBody2D"]
+collision_layer = 1
+collision_mask = 0
+script = SubResource("script")
+
+[node name="Sprite" type="Sprite2D" parent="."]
+
+[node name="Shape" type="CollisionShape2D" parent="."]
+shape = SubResource("body_shape")
+
+[node name="Mouth" type="Area2D" parent="."]
+collision_layer = 0
+collision_mask = 64
+
+[node name="MouthShape" type="CollisionShape2D" parent="Mouth"]
+position = Vector2(0, -36)
+shape = SubResource("area_shape")

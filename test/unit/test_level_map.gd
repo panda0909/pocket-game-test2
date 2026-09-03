@@ -82,3 +82,19 @@ func test_missing_separator_treats_all_lines_as_map() -> void:
 	assert_eq(m.height, 2)
 	assert_eq(m.time_limit, 300)
 	assert_true(m.is_valid(), str(m.errors))
+
+func test_room_levels_skip_spawn_and_goal_validation() -> void:
+	var m := LevelMap.parse("room: true\npipe1: __return__\n---\n# 1 #\n#####")
+	assert_true(m.is_valid(), str(m.errors))
+	assert_true(m.is_room)
+
+func test_pipe_room_file_parses() -> void:
+	var m := LevelMap.load_from("res://levels/level1_pipe_a.txt")
+	assert_true(m.is_valid(), str(m.errors))
+	assert_true(m.is_room)
+	var pipes := 0
+	for e in m.entities:
+		if e["type"] == "pipe":
+			pipes += 1
+			assert_eq(e["params"]["target"], "__return__")
+	assert_eq(pipes, 1, "暗房要有一個回程水管")

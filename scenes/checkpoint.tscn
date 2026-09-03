@@ -1,0 +1,46 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Texture2D" path="res://assets/flag.png" id="1"]
+
+[sub_resource type="RectangleShape2D" id="shape"]
+size = Vector2(48, 160)
+
+[sub_resource type="GDScript" id="script"]
+script/source = "extends Area2D
+
+## 檢查點。通過之後死亡從這裡重生。
+##
+## 長關卡沒有檢查點就變成「一失誤重來十五個畫面」，那不是難度，是浪費時間。
+
+var _taken := false
+
+func _ready() -> void:
+	add_to_group(\"checkpoint\")
+	modulate = Color(0.62, 0.72, 0.86)
+
+func mark_taken() -> void:
+	if _taken:
+		return
+	_taken = true
+	monitorable = false
+	modulate = Color(1, 1, 1)
+	var tween := create_tween()
+	tween.tween_property(self, \"scale\", Vector2(1.25, 1.25), 0.14)
+	tween.tween_property(self, \"scale\", Vector2(1, 1), 0.2) \\
+		.set_trans(Tween.TRANS_BOUNCE)
+"
+
+[node name="Checkpoint" type="Area2D"]
+collision_layer = 16
+collision_mask = 0
+monitoring = false
+script = SubResource("script")
+
+[node name="Sprite" type="Sprite2D" parent="."]
+texture = ExtResource("1")
+offset = Vector2(0, -128)
+scale = Vector2(0.7, 0.7)
+
+[node name="Shape" type="CollisionShape2D" parent="."]
+position = Vector2(0, -84)
+shape = SubResource("shape")
