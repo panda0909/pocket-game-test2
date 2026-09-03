@@ -15,7 +15,7 @@ Game2 那批寫實暗黑風的熊放在平台遊戲裡會被玩家貼著看，�
 import math
 import os
 
-from PIL import Image, ImageChops, ImageDraw
+from PIL import Image, ImageChops, ImageDraw, ImageFont
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ASSETS = os.path.join(ROOT, "assets")
@@ -434,6 +434,78 @@ def build_arrow():
     return finish(img, w, h, os.path.join(ENEMIES, "arrow.png"))
 
 
+def build_share_cover():
+    """分享用的 Open Graph 預覽圖，1200x630。
+
+    Facebook 不吃我們送過去的文字，只讀網址的 OG 標籤，所以分享長什麼樣子
+    完全由這張圖和那幾行 meta 決定。1200x630 是 OG 的標準比例，小於
+    600x315 的話 Facebook 會縮成小方圖。
+
+    三隻主角並排放在盤面背景上——分享出去的人想炫耀的是「我玩了這個」，
+    所以主角要夠大、標題要看得清。
+    """
+    width, height = 1200, 630
+    img = Image.new("RGBA", (width, height), SKY_TOP)
+    draw = ImageDraw.Draw(img)
+    for y in range(height):
+        t = y / (height - 1)
+        color = tuple(
+            int(SKY_TOP[i] + (SKY_BOTTOM[i] - SKY_TOP[i]) * t) for i in range(4)
+        )
+        draw.line([(0, y), (width, y)], fill=color)
+
+    # 遠景 K 線，和遊戲背景同一套語彙
+    layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    ld = ImageDraw.Draw(layer)
+    for i in range(28):
+        x = 12 + i * 43
+        wave = math.sin(i * 0.7) * 70 + math.sin(i * 0.23) * 50
+        top = 230 + wave
+        bar = 110 + abs(math.cos(i * 0.5)) * 130
+        ld.rectangle([x, top, x + 22, top + bar],
+                     fill=CANDLE_LIGHT if i % 2 == 0 else CANDLE_DARK)
+    img.alpha_composite(layer)
+
+    # 地面
+    ground = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    gd = ImageDraw.Draw(ground)
+    gd.rectangle([0, height - 96, width, height], fill=GROUND_BODY)
+    gd.rectangle([0, height - 96, width, height - 76], fill=GROUND_TOP)
+    img.alpha_composite(ground)
+
+    # 三隻主角。原圖高 180，放大到 300 讓它們在縮圖裡也看得清。
+    characters = ["red_bull.png", "dino.png", "gecko.png"]
+    target_h = 300
+    slots = [300, 600, 900]
+    for name, cx in zip(characters, slots):
+        path = os.path.join(ASSETS, "characters", name)
+        if not os.path.exists(path):
+            continue
+        sprite = Image.open(path).convert("RGBA")
+        scale = target_h / sprite.height
+        sprite = sprite.resize(
+            (max(1, int(sprite.width * scale)), target_h), Image.LANCZOS)
+        img.alpha_composite(sprite, (cx - sprite.width // 2,
+                                     height - 96 - target_h + 8))
+
+    # 標題直接畫在圖上。OG 的 title 標籤在 Facebook 卡片上會另外顯示，
+    # 但貼到 Threads 或存成圖片時只剩這張圖，所以圖自己要說得出名字。
+    font_path = os.path.join(ASSETS, "fonts", "NotoSansTC-Bold.otf")
+    if os.path.exists(font_path):
+        title_font = ImageFont.truetype(font_path, 86)
+        text = "口袋牛牛大冒險"
+        td = ImageDraw.Draw(img)
+        box = td.textbbox((0, 0), text, font=title_font)
+        tx = (width - (box[2] - box[0])) // 2
+        ty = 44
+        # 粗描邊，和遊戲內的 HUD 同一個做法，淺色天空上才讀得清
+        td.text((tx, ty), text, font=title_font, fill=(255, 255, 255, 255),
+                stroke_width=10, stroke_fill=(20, 24, 34, 255))
+
+    img.save(os.path.join(ASSETS, "share_cover.png"))
+    return img
+
+
 def main():
     os.makedirs(ENEMIES, exist_ok=True)
     outputs = [
@@ -447,6 +519,7 @@ def main():
         ("enemies/spikeball.png", build_spikeball()),
         ("enemies/arrow.png", build_arrow()),
         ("enemies/boss.png", build_boss()),
+        ("share_cover.png", build_share_cover()),
     ]
     for name, image in outputs:
         print("%-22s %s" % (name, image.size))

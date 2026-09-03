@@ -44,6 +44,10 @@ cp -R "$WEB_DIR"/. "$PAGES_DIR"/
 # 讓 GitHub Pages 直接送檔案，不要跑 Jekyll
 touch "$PAGES_DIR/.nojekyll"
 
+# OG 預覽圖要放在網站根目錄。index.html 裡的 og:image 是絕對網址，
+# 指向 <站台>/share_cover.png——Facebook 的爬蟲抓不到就沒有預覽圖。
+cp assets/share_cover.png "$PAGES_DIR/share_cover.png"
+
 cd "$PAGES_DIR"
 git init -q -b gh-pages
 git add -A

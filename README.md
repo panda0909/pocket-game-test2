@@ -50,6 +50,29 @@ Shift 就是純衝刺、零代價。
 **Boss 要踩三次或用金幣打六發。** 兩條路都留著：把金幣丟光了還是能靠踩踏過關，
 不會卡在關底。Boss 活著的時候旗竿是暗的、碰不到。
 
+## 分享成績
+
+通關或遊戲結束後，選單有四個動作：**分享到 Facebook｜分享到 Threads｜複製成績文字｜再玩一次**
+（←→ 選、空白鍵確定，滑鼠也能點）。游標預設停在「再玩一次」，所以連按兩下空白鍵重來的
+習慣仍然有效。
+
+三個平台的能力差很多，實作上不假裝它們一樣：
+
+| 平台 | 做法 | 限制 |
+|---|---|---|
+| Threads | `threads.net/intent/post?text=` 官方 web intent | 文字會完整預填 |
+| Facebook | `sharer.php?u=` 分享視窗 | **不吃我們給的文字**，只讀網址的 OG 標籤 |
+| Instagram | 複製成績文字到剪貼簿，玩家自己貼 | **Instagram 沒有任何網頁分享網址可以預填貼文** |
+
+所以 Facebook 的分享長相完全取決於 OG 標籤：`export_presets.cfg` 的 `html/head_include`
+會在每次匯出時把 `og:title` / `og:description` / `og:image` 注入 `<head>`，預覽圖是
+`tools/prepare_assets.py` 產生的 `assets/share_cover.png`（1200×630，OG 標準比例），
+由 `tools/publish_pages.sh` 複製到網站根目錄。
+
+**彈出視窗被擋時會直接導覽當前分頁。** Godot 把瀏覽器輸入排進自己的幀迴圈才處理，
+`window.open` 的呼叫已經離開使用者手勢，瀏覽器有理由擋它。被擋是偵測得到的
+（`window.open` 回 `null`），所以只在真的被擋時才離開遊戲——分數已經定案，按上一頁就回來了。
+
 ## 開發
 
 需要 Godot 4.7.2。開啟專案：

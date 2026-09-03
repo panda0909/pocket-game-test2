@@ -33,6 +33,7 @@ var _death_pending := false
 @onready var _player: Player = $Player
 @onready var _hud: HUD = $HUD
 @onready var _select: CharacterSelect = $CharacterSelect
+@onready var _end_menu: EndMenu = $EndMenu
 
 
 func _ready() -> void:
@@ -43,6 +44,7 @@ func _ready() -> void:
 	_select.moved.connect(_on_select_moved)
 	_select.confirmed.connect(_on_select_confirmed)
 	_select.cancelled.connect(_on_select_cancelled)
+	_end_menu.chosen.connect(_on_end_menu_chosen)
 	_enter_state(Flow.TITLE)
 
 
@@ -245,13 +247,13 @@ func _unhandled_input(event: InputEvent) -> void:
 	if flow_state == Flow.SELECT:
 		_select.handle_action(event)
 		return
+	if flow_state == Flow.GAME_OVER or flow_state == Flow.CLEARED:
+		_end_menu.handle_action(event)
+		return
 	if not event.is_action_pressed("jump"):
 		return
-	match flow_state:
-		Flow.TITLE:
-			_advance("start")
-		Flow.GAME_OVER, Flow.CLEARED:
-			_advance("restart")
+	if flow_state == Flow.TITLE:
+		_advance("start")
 
 
 func _on_select_moved(direction: int) -> void:
@@ -266,6 +268,31 @@ func _on_select_confirmed() -> void:
 
 func _on_select_cancelled() -> void:
 	_advance("back")
+
+
+## 結束畫面的四個動作。分享失敗時明說，不假裝成功——
+## 瀏覽器擋彈出視窗或不給剪貼簿權限都是常見情況。
+func _on_end_menu_chosen(action: String) -> void:
+	var cleared := flow_state == Flow.CLEARED
+	var message := ShareText.full_message(stats, character_index, cleared)
+	match action:
+		"facebook":
+			if ShareBridge.open_url(ShareText.facebook_url()):
+				_end_menu.show_note("正在開啟 Facebook 分享（若沒有新分頁，會直接跳轉過去）")
+			else:
+				_end_menu.show_note("這個版本不是網頁版，無法開啟分享視窗")
+		"threads":
+			if ShareBridge.open_url(ShareText.threads_url(message)):
+				_end_menu.show_note("正在開啟 Threads，文字已經幫你填好了")
+			else:
+				_end_menu.show_note("這個版本不是網頁版，無法開啟分享視窗")
+		"copy":
+			if ShareBridge.copy_to_clipboard(message):
+				_end_menu.show_note("成績文字已複製，貼到 Instagram 就好")
+			else:
+				_end_menu.show_note("複製失敗，請手動選取下面這段文字：%s" % message)
+		"again":
+			_advance("restart")
 
 
 func _process(delta: float) -> void:
@@ -287,6 +314,7 @@ func _enter_state(state: int, event := "") -> void:
 	flow_state = state
 	_player.control_enabled = Flow.accepts_input(state)
 	_select.visible = state == Flow.SELECT
+	_end_menu.visible = state == Flow.GAME_OVER or state == Flow.CLEARED
 	_hud.set_stats_visible(state != Flow.TITLE and state != Flow.SELECT)
 	match state:
 		Flow.TITLE:
@@ -301,10 +329,12 @@ func _enter_state(state: int, event := "") -> void:
 			if event == "died":
 				_respawn()
 		Flow.GAME_OVER:
-			_hud.show_message("遊戲結束", "分數 %d　　按空白鍵回到標題" % stats.score)
+			_hud.hide_message()
+			_end_menu.show_result(false, stats.score, stats.coins)
 		Flow.CLEARED:
 			stats.finish()
-			_hud.show_message("通關！", "分數 %d　　按空白鍵再玩一次" % stats.score)
+			_hud.hide_message()
+			_end_menu.show_result(true, stats.score, stats.coins)
 	_hud.update_stats(stats, _player.state.is_big())
 
 

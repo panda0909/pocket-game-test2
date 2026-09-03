@@ -33,6 +33,8 @@ func _ready() -> void:
 	await _check_sprint_is_faster()
 	await _check_small_player_can_sprint()
 	await _check_tapping_shift_throws_a_coin()
+	await _check_end_menu_appears_and_navigates()
+	await _check_share_actions_degrade_outside_web()
 
 	print("---")
 	print("通過 %d　失敗 %d" % [_passed, _failed])
@@ -383,6 +385,63 @@ func _tap_action(action: String) -> void:
 	await get_tree().physics_frame
 	Input.action_release(action)
 	await get_tree().physics_frame
+
+
+## 通關後出現結束選單，←→ 走得動，游標預設停在「再玩一次」。
+func _check_end_menu_appears_and_navigates() -> void:
+	var main := await _make_main()
+	main.begin_game()
+	await get_tree().process_frame
+	main.get_node("Player").goal_reached.emit()
+	await get_tree().process_frame
+
+	var menu: EndMenu = main.get_node("EndMenu")
+	_expect(main.flow_state == Flow.CLEARED, "碰到旗竿進入通關狀態")
+	_expect(menu.visible, "通關後結束選單看得到")
+	_expect(menu.current_action() == EndMenu.DEFAULT_ACTION,
+		"游標預設停在再玩一次（連按兩下空白鍵的舊習慣還能用）",
+		"停在 %s" % menu.current_action())
+
+	await _tap(KEY_RIGHT)
+	_expect(menu.current_action() != EndMenu.DEFAULT_ACTION,
+		"按右鍵換到別的選項", "還停在 %s" % menu.current_action())
+	await _tap(KEY_LEFT)
+	_expect(menu.current_action() == EndMenu.DEFAULT_ACTION,
+		"按左鍵換回來", "停在 %s" % menu.current_action())
+
+	# 選「再玩一次」要回到標題
+	await _tap(KEY_SPACE)
+	_expect(main.flow_state == Flow.TITLE, "選再玩一次回到標題",
+		"flow_state=%d" % main.flow_state)
+	_expect(not menu.visible, "回到標題後選單收起來")
+	main.queue_free()
+	await get_tree().process_frame
+
+
+## 非網頁環境下三個分享動作都不能崩，而且要老實說「這裡辦不到」。
+## 整合測試跑在 headless，正好是那個環境。
+func _check_share_actions_degrade_outside_web() -> void:
+	_expect(not ShareBridge.is_available(),
+		"headless 下 ShareBridge 回報不可用")
+
+	var main := await _make_main()
+	main.begin_game()
+	await get_tree().process_frame
+	main.get_node("Player").goal_reached.emit()
+	await get_tree().process_frame
+
+	var menu: EndMenu = main.get_node("EndMenu")
+	for action in ["facebook", "threads", "copy"]:
+		menu.chosen.emit(action)
+		await get_tree().process_frame
+		_expect(not menu.current_note().is_empty(),
+			"選 %s 之後有明確的提示文字" % action)
+
+	# 分享不該把流程狀態帶走——按了分享還要留在結束畫面
+	_expect(main.flow_state == Flow.CLEARED, "分享之後還留在結束畫面",
+		"flow_state=%d" % main.flow_state)
+	main.queue_free()
+	await get_tree().process_frame
 
 
 func _check_levels_parse() -> void:
