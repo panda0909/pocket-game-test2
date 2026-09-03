@@ -124,6 +124,10 @@ func respawn_at(pos: Vector2) -> void:
 	control_enabled = true
 	_impulse_scale = Vector2.ONE
 	_apply_size()
+	# 重生要瞬間切鏡，不然相機會從死亡地點慢慢滑回檢查點，
+	# 玩家有一秒鐘不知道自己在哪。
+	_camera.offset.x = _facing * CAMERA_LOOKAHEAD
+	_camera.reset_smoothing()
 
 
 ## 相機邊界。關卡建構完才知道關卡多大，所以由 Main 呼叫。
