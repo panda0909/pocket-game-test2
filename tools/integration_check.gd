@@ -25,6 +25,7 @@ func _ready() -> void:
 	await _check_scoring_and_flow()
 	await _check_space_key_starts_game()
 	await _check_player_runs_and_jumps()
+	await _check_milk_lands_within_reach()
 
 	print("---")
 	print("通過 %d　失敗 %d" % [_passed, _failed])
@@ -102,6 +103,59 @@ func _check_player_runs_and_jumps() -> void:
 	var rise := ground_y - player.global_position.y
 	_expect(rise > 40.0, "按跳會離地", "只上升了 %.1f px" % rise)
 
+	main.queue_free()
+	await get_tree().process_frame
+
+
+## 頂出來的牛奶要落到地面上。原本它停在磚頂，而磚為了讓大牛鑽得過去必須
+## 離地 3 格，道具就落在跳不到的高度。這條測試守著「拿得到」這件事。
+func _check_milk_lands_within_reach() -> void:
+	var main := await _make_main()
+	var block: Node = null
+	for node in main.get_node("Entities").get_children():
+		if node.is_in_group("block") \
+				and node.kind == TileGlossary.KIND_MILK_BRICK:
+			block = node
+			break
+	if block == null:
+		_fail("主關卡有牛奶磚")
+		main.queue_free()
+		return
+	_ok("主關卡有牛奶磚")
+
+	var block_y: float = block.global_position.y
+	_expect(block.hit_from_below(false) == "milk", "牛奶磚頂得出牛奶")
+
+	var milk: Node2D = null
+	for i in 180:
+		await get_tree().physics_frame
+		for node in main.get_node("Entities").get_children():
+			if node.is_in_group("powerup"):
+				milk = node
+				break
+		if milk != null and bool(milk.get("_landed")):
+			break
+
+	if milk == null:
+		_fail("牛奶有生成")
+		main.queue_free()
+		return
+	_ok("牛奶有生成")
+
+	_expect(bool(milk.get("_landed")), "牛奶有落地")
+
+	# 磚塊在離地 3 格處，所以牛奶落地後應該比磚塊低 2 格以上。
+	# 這條就是在守「拿得到」：停在磚頂的話 drop 會是負的。
+	var drop := milk.global_position.y - block_y
+	_expect(drop > LevelBuilder.TILE * 1.5,
+		"牛奶落到地面而不是停在磚上", "只低了 %.0f px" % drop)
+
+	# 真正的驗收：玩家從那塊地面起跳，頭頂碰得到牛奶嗎？
+	var ground_y := milk.global_position.y + Powerup.GROUND_OFFSET
+	var head_reach := ground_y - Player.SMALL_HEIGHT - PlayerPhysics.jump_height()
+	var milk_bottom := milk.global_position.y + Powerup.GROUND_OFFSET
+	_expect(head_reach < milk_bottom, "小牛跳得到牛奶",
+		"頭頂只到 %.0f，牛奶底部在 %.0f" % [head_reach, milk_bottom])
 	main.queue_free()
 	await get_tree().process_frame
 

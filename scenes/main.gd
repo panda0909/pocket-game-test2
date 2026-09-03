@@ -96,10 +96,32 @@ func _on_block_popped_coin(position: Vector2) -> void:
 	_spawn_coin_pop(position)
 
 
-func _on_block_popped_milk(position: Vector2) -> void:
+## 牛奶該落在哪一列，用關卡資料算——關卡是純資料，「底下第一格實心地面
+## 在哪」本來就該問資料，在場景裡打射線只會先打到磚塊自己。
+func _on_block_popped_milk(cell: Vector2i) -> void:
 	var milk := POWERUP_SCENE.instantiate()
-	milk.position = position
+	milk.position = LevelBuilder.cell_center(cell) + Vector2(0, -TILE * 0.4)
 	_entities.add_child(milk)
+	milk.drop_to(_ground_surface_below(cell), _drift_direction(cell))
+
+
+## 往下找第一格實心地面的表面 y。整欄都沒有地面（磚塊架在坑上）時，
+## 就落在關卡底部，玩家看得到它掉下去。
+func _ground_surface_below(cell: Vector2i) -> float:
+	for row in range(cell.y + 1, _map.height):
+		if TileGlossary.is_solid(_map.terrain_at(Vector2i(cell.x, row))):
+			return float(row * TILE)
+	return float(_map.height * TILE)
+
+
+## 往哪邊滑。右邊有實心的就往左，兩邊都有就往右——差在觀感，
+## 落點高度已經由 _ground_surface_below 保證是站得到的地面。
+func _drift_direction(cell: Vector2i) -> int:
+	if TileGlossary.is_solid(_map.terrain_at(Vector2i(cell.x + 1, cell.y))) \
+			and not TileGlossary.is_solid(
+				_map.terrain_at(Vector2i(cell.x - 1, cell.y))):
+		return -1
+	return 1
 
 
 func _spawn_coin_pop(position: Vector2) -> void:

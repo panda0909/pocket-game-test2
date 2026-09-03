@@ -7,7 +7,7 @@ extends StaticBody2D
 ## 播動畫、單獨消失。圖磚沒有狀態，節點才有。
 
 signal popped_coin(position: Vector2)
-signal popped_milk(position: Vector2)
+signal popped_milk(cell: Vector2i)
 
 const TILE := 64
 const BUMP_HEIGHT := 12.0
@@ -23,6 +23,11 @@ var _home_y := 0.0
 
 func setup(block_kind: int) -> void:
 	kind = block_kind
+
+
+## 自己在關卡格線上的位置。原點在格子中心，所以直接整除即可。
+func cell() -> Vector2i:
+	return Vector2i(int(position.x) / TILE, int(position.y) / TILE)
 
 
 func _ready() -> void:
@@ -43,7 +48,7 @@ func hit_from_below(player_is_big: bool) -> String:
 		"milk":
 			_used = true
 			_apply_column(BlockRules.spent_column(kind))
-			popped_milk.emit(global_position + Vector2(0, -TILE))
+			popped_milk.emit(cell())
 			_bump()
 		"broke":
 			_break()
