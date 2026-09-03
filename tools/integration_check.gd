@@ -26,6 +26,8 @@ func _ready() -> void:
 	await _check_space_key_starts_game()
 	await _check_player_runs_and_jumps()
 	await _check_milk_lands_within_reach()
+	await _check_stomping_actually_kills()
+	await _check_side_contact_hurts_instead()
 
 	print("---")
 	print("通過 %d　失敗 %d" % [_passed, _failed])
@@ -158,6 +160,79 @@ func _check_milk_lands_within_reach() -> void:
 		"頭頂只到 %.0f，牛奶底部在 %.0f" % [head_reach, milk_bottom])
 	main.queue_free()
 	await get_tree().process_frame
+
+
+## 從上方落下真的踩得死敵人。
+##
+## 這條是踩不死那個 bug 的補洞測試。原本的單元測試拿手挑的數值去測判定
+## 函式，測得過，但函式的契約本身就錯了——它用當幀位置判，而真實墜落速度
+## 下那個判定窗只有幾個像素寬，每次都被跨過去。只有讓玩家真的掉下去才看得出來。
+func _check_stomping_actually_kills() -> void:
+	var main := await _make_main()
+	main.begin_game()
+	var player: Player = main.get_node("Player")
+	var target := _first_stompable(main)
+	if target == null:
+		_fail("關卡裡有可踩的敵人")
+		main.queue_free()
+		return
+	_ok("關卡裡有可踩的敵人")
+
+	player.global_position = target.global_position + Vector2(0, -220)
+	player.velocity = Vector2.ZERO
+	var bounced := false
+	for i in 60:
+		await get_tree().physics_frame
+		if player.velocity.y < -100.0:
+			bounced = true
+			break
+		if not is_instance_valid(target):
+			break
+
+	_expect(bounced, "從上方落下會彈起來（踩到了）",
+		"velocity.y=%.1f" % player.velocity.y)
+	for i in 30:
+		await get_tree().physics_frame
+	_expect(not is_instance_valid(target) or not target.get("_alive"),
+		"被踩的敵人死了")
+	main.queue_free()
+	await get_tree().process_frame
+
+
+## 從側面撞上去要受傷，不能被誤判成踩踏。
+func _check_side_contact_hurts_instead() -> void:
+	var main := await _make_main()
+	main.begin_game()
+	var player: Player = main.get_node("Player")
+	var target := _first_stompable(main)
+	if target == null:
+		main.queue_free()
+		return
+
+	player.grow()
+	var was_big: bool = player.state.is_big()
+	# 腳底和敵人同高、水平貼上去
+	player.global_position = target.global_position + Vector2(-30, 0)
+	player.velocity = Vector2(200, 60)
+	for i in 20:
+		await get_tree().physics_frame
+		if not player.state.is_big():
+			break
+
+	_expect(was_big and not player.state.is_big(),
+		"從側面撞上去會受傷而不是踩死",
+		"is_big=%s 敵人還在=%s" % [player.state.is_big(),
+			is_instance_valid(target)])
+	main.queue_free()
+	await get_tree().process_frame
+
+
+func _first_stompable(main: Node) -> Node2D:
+	for node in main.get_node("Entities").get_children():
+		if node.is_in_group("enemy") and not node.is_in_group("boss") \
+				and EnemyRules.is_stompable(node.kind):
+			return node
+	return null
 
 
 func _check_levels_parse() -> void:

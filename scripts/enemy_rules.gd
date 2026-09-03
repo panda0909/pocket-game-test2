@@ -21,9 +21,10 @@ const SPIKEBALL_SPEED := 30.0
 const ARROW_TRIGGER_RANGE := 320.0
 const ARROW_DIVE_SPEED := 260.0
 
-## 踩踏判定的容差：玩家腳底必須高過敵人中心這麼多像素才算踩到。
-## 太小會讓「從側面貼上去」被誤判成踩，太大則會讓明顯踩到的判定不成立。
-const STOMP_MARGIN := 8.0
+## 踩踏容差：上一幀腳底就算已經越過敵人頭頂這麼多像素，仍然算踩到。
+## 少了它判定窗會窄到玩家覺得遊戲在耍賴；太大則會讓「從側面貼上去」也被
+## 誤判成踩。12 px 約是敵人身高的四分之一。
+const STOMP_TOLERANCE := 12.0
 
 const _STOMPABLE := [KIND_BEAR, KIND_ARROW]
 
@@ -83,11 +84,19 @@ static func turn_direction(direction: int, blocked_ahead: bool,
 
 ## 這次接觸算不算踩到？
 ##
+## 判定看的是**上一幀**腳底在不在敵人頭頂上方，不是當幀的相對位置。
+##
+## 為什麼不能用當幀位置：第一版拿「腳底相對敵人中心」判，可判定的區間只有
+## 幾個像素寬——偵測要等碰撞框重疊才開始，而那時腳底已經陷進敵人體內一截。
+## 玩家以 600 px/s 墜落一幀移動 10 px，實測會從「還在上面」直接跳到「已經
+## 穿過腰部」，整個窗口被跨過去，於是每次都判成受傷。用上一幀的位置就對幀率
+## 免疫：只要腳底是從上面越過頭頂線的，不管一幀跨多遠都算踩到。
+##
 ## player_velocity_y  玩家垂直速度（正值代表下墜）
-## relative_y         玩家腳底相對敵人中心的位置（負值代表在上面）
-## enemy_half_height  敵人半高，用來換算容差
-static func is_stomp(player_velocity_y: float, relative_y: float,
-		enemy_half_height: float) -> bool:
+## previous_feet_y    上一幀玩家腳底的世界座標 y
+## enemy_top_y        敵人頭頂的世界座標 y
+static func is_stomp(player_velocity_y: float, previous_feet_y: float,
+		enemy_top_y: float) -> bool:
 	if player_velocity_y <= 0.0:
 		return false
-	return relative_y < -minf(STOMP_MARGIN, enemy_half_height * 0.5)
+	return previous_feet_y <= enemy_top_y + STOMP_TOLERANCE

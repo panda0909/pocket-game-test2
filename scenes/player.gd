@@ -25,6 +25,8 @@ const BASE_SPRITE_SCALE := SMALL_HEIGHT / SPRITE_SOURCE_HEIGHT
 
 const SMALL_BODY := Vector2(56, 120)
 const CAMERA_LOOKAHEAD := 120.0
+## 接觸框比身體往下多伸出的距離，讓腳底剛碰到敵人的那一幀就偵測得到。
+const TOUCH_FOOT_MARGIN := 8.0
 
 ## 跑步時的身體起伏。頻率隨速度變化，站著不動時完全靜止。
 const RUN_BOB_HEIGHT := 5.0
@@ -40,6 +42,8 @@ var _facing := 1
 var _cycle := 0.0
 var _impulse_scale := Vector2.ONE
 var _was_on_floor := true
+## 上一幀腳底的位置。踩踏判定要用它，用當幀位置會被幀間位移跳過去。
+var _previous_feet_y := 0.0
 var _standing_pipe := ""
 
 @onready var _sprite: Sprite2D = $Sprite
@@ -54,6 +58,7 @@ func _ready() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	var previous_feet_y := global_position.y
 	var input := _read_input()
 	var result := PlayerPhysics.step(velocity, input, is_on_floor(), delta, _timers)
 	velocity = result["velocity"]
@@ -63,6 +68,7 @@ func _physics_process(delta: float) -> void:
 		_punch_scale(Vector2(0.82, 1.22), 0.15)
 
 	move_and_slide()
+	_previous_feet_y = previous_feet_y
 
 	if is_on_floor() and not _was_on_floor:
 		_punch_scale(Vector2(1.25, 0.78), 0.18)
@@ -120,6 +126,7 @@ func respawn_at(pos: Vector2) -> void:
 	global_position = pos
 	velocity = Vector2.ZERO
 	_timers = PlayerPhysics.new_timers()
+	_previous_feet_y = pos.y
 	state.reset()
 	control_enabled = true
 	_impulse_scale = Vector2.ONE
@@ -154,8 +161,13 @@ func _apply_size() -> void:
 	var shape := _body_shape.shape as RectangleShape2D
 	shape.size = size
 	_body_shape.position.y = -size.y * 0.5
-	($TouchBox/TouchShape.shape as RectangleShape2D).size = size * 0.86
-	$TouchBox/TouchShape.position.y = -size.y * 0.5
+
+	# 接觸框要一路蓋到腳底、再往下多留一點。原本它比身體矮 14%，下緣停在
+	# 腳底上方 8 px，於是要等玩家陷進敵人體內才開始偵測到重疊——踩踏的
+	# 判定窗因此被壓到只剩幾個像素。
+	var touch := Vector2(size.x * 0.85, size.y + TOUCH_FOOT_MARGIN * 2.0)
+	($TouchBox/TouchShape.shape as RectangleShape2D).size = touch
+	$TouchBox/TouchShape.position.y = -size.y * 0.5 + TOUCH_FOOT_MARGIN
 
 
 func _punch_scale(target: Vector2, duration: float) -> void:
@@ -218,11 +230,13 @@ func _resolve_enemy_contacts() -> void:
 	for body in $TouchBox.get_overlapping_bodies():
 		if not body.is_in_group("enemy"):
 			continue
+		# 原點在腳底，所以頭頂 = 原點往上兩個半高
 		var half: float = body.half_height
-		var relative_y: float = global_position.y - (body.global_position.y - half)
+		var enemy_top: float = body.global_position.y - half * 2.0
 		var stompable: bool = body.is_in_group("boss") \
 			or EnemyRules.is_stompable(body.kind)
-		if not (stompable and EnemyRules.is_stomp(velocity.y, relative_y, half)):
+		if not (stompable
+				and EnemyRules.is_stomp(velocity.y, _previous_feet_y, enemy_top)):
 			enemy_touched.emit()
 			return
 

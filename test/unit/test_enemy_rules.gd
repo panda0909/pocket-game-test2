@@ -34,13 +34,37 @@ func test_texture_path_for_each_kind() -> void:
 		var path := EnemyRules.texture_path(kind)
 		assert_true(ResourceLoader.exists(path), "缺少貼圖 %s" % path)
 
-func test_stomp_requires_falling_and_being_above() -> void:
-	# 玩家在敵人上方且正在下墜 -> 踩死
-	assert_true(EnemyRules.is_stomp(120.0, -40.0, 30.0))
-	# 玩家在下墜但位置在敵人腳下 -> 不算踩
-	assert_false(EnemyRules.is_stomp(120.0, 40.0, 30.0))
-	# 玩家在上方但正在上升（往上頂） -> 不算踩
-	assert_false(EnemyRules.is_stomp(-120.0, -40.0, 30.0))
+## 踩踏判定看的是「上一幀腳底在不在敵人頭頂上方」，不是當幀的相對位置。
+## 用當幀位置判會被幀間位移跳過去：玩家以 600 px/s 墜落一幀移動 10 px，
+## 而可判定的區間只有幾個像素寬，實測會直接從「還在上面」跳到「已經穿過腰部」。
+
+func test_stomp_when_feet_crossed_enemy_top_this_frame() -> void:
+	assert_true(EnemyRules.is_stomp(600.0, 290.0, 300.0))
+
+func test_no_stomp_when_already_below_top_last_frame() -> void:
+	# 從側面撞上來：上一幀腳底已經在敵人腰部
+	assert_false(EnemyRules.is_stomp(600.0, 340.0, 300.0))
+
+func test_no_stomp_when_rising() -> void:
+	assert_false(EnemyRules.is_stomp(-600.0, 290.0, 300.0))
+
+func test_no_stomp_when_standing_still() -> void:
+	assert_false(EnemyRules.is_stomp(0.0, 290.0, 300.0))
+
+## 這條是這個 bug 的核心：一幀掉很多也不能漏判。
+func test_fast_fall_is_not_skipped() -> void:
+	var enemy_top := 300.0
+	for step: float in [10.0, 15.0, 30.0, 60.0]:
+		var previous := enemy_top - step * 0.6
+		assert_true(EnemyRules.is_stomp(900.0, previous, enemy_top),
+			"一幀移動 %.0f px 時漏判了踩踏" % step)
+
+## 容差讓「幾乎踩到」也算數。少了它，判定窗窄到玩家覺得遊戲在耍賴。
+func test_small_tolerance_below_the_top_still_counts() -> void:
+	assert_true(EnemyRules.is_stomp(600.0,
+		300.0 + EnemyRules.STOMP_TOLERANCE - 1.0, 300.0))
+	assert_false(EnemyRules.is_stomp(600.0,
+		300.0 + EnemyRules.STOMP_TOLERANCE + 1.0, 300.0))
 
 func test_score_differs_by_kind() -> void:
 	assert_gt(EnemyRules.score(EnemyRules.KIND_ARROW),
