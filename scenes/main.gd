@@ -41,6 +41,8 @@ func _connect_player() -> void:
 	_player.coin_collected.connect(_on_coin_collected)
 	_player.goal_reached.connect(_on_goal_reached)
 	_player.hazard_touched.connect(_on_hazard_touched)
+	_player.enemy_stomped.connect(_on_enemy_stomped)
+	_player.enemy_touched.connect(_on_hazard_touched)
 	_player.died.connect(_on_player_died)
 
 
@@ -50,6 +52,10 @@ func _on_coin_collected() -> void:
 
 func _on_goal_reached() -> void:
 	stats.finish()
+
+
+func _on_enemy_stomped(kind: int) -> void:
+	stats.add_score(EnemyRules.score(kind))
 
 
 func _on_hazard_touched() -> void:

@@ -15,6 +15,7 @@ const SOURCE_ID := 0
 
 const COIN_SCENE := preload("res://scenes/coin.tscn")
 const GOAL_SCENE := preload("res://scenes/goal_flag.tscn")
+const ENEMY_SCENE := preload("res://scenes/enemy.tscn")
 
 ## 進 TileMapLayer 的地形。尖刺也進，但不給碰撞多邊形——它靠 Area2D 傷人，
 ## 玩家該踩得進去而不是站在上面。
@@ -133,4 +134,11 @@ static func _make_entity(entity: Dictionary) -> Node2D:
 			var goal := GOAL_SCENE.instantiate()
 			goal.position = cell_bottom(cell)
 			return goal
+		"bear", "spikeball", "arrow":
+			var enemy := ENEMY_SCENE.instantiate()
+			enemy.setup(EnemyRules.kind_from_type(type))
+			# 刺球與箭頭懸空，站在格子中央；小熊站在格子底邊。
+			enemy.position = cell_bottom(cell) if type == "bear" \
+				else cell_center(cell)
+			return enemy
 	return null

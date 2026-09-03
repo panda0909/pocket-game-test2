@@ -8,6 +8,8 @@ extends CharacterBody2D
 ## 特別討喜，而且換成 AnimatedSprite2D 時遊戲邏輯一行都不用動。
 
 signal died
+signal enemy_stomped(kind: int)
+signal enemy_touched
 signal coin_collected
 signal milk_collected
 signal goal_reached
@@ -66,6 +68,7 @@ func _physics_process(delta: float) -> void:
 		_punch_scale(Vector2(1.25, 0.78), 0.18)
 	_was_on_floor = is_on_floor()
 
+	_resolve_enemy_contacts()
 	state.advance(delta)
 	_update_visual(delta)
 
@@ -188,6 +191,29 @@ func _update_visual(delta: float) -> void:
 
 	_camera.offset.x = move_toward(_camera.offset.x, _facing * CAMERA_LOOKAHEAD,
 		240.0 * delta)
+
+
+## 每幀輪詢重疊的敵人，而不是只靠 body_entered 訊號。
+## 訊號只在「進入」的那一幀發，玩家站在敵人身上不動時就再也不會觸發；
+## 輪詢才能處理持續接觸。
+func _resolve_enemy_contacts() -> void:
+	if state.is_invincible():
+		return
+	for body in $TouchBox.get_overlapping_bodies():
+		if not body.is_in_group("enemy"):
+			continue
+		var enemy := body as Enemy
+		var enemy_center_y := enemy.global_position.y - enemy.half_height
+		var relative_y := global_position.y - enemy_center_y
+		if EnemyRules.is_stompable(enemy.kind) \
+				and EnemyRules.is_stomp(velocity.y, relative_y, enemy.half_height):
+			var kind := enemy.kind
+			enemy.die()
+			apply_stomp(Input.is_action_pressed("jump"))
+			enemy_stomped.emit(kind)
+		else:
+			enemy_touched.emit()
+		return
 
 
 func _on_area_entered(area: Area2D) -> void:
