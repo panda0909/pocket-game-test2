@@ -4,6 +4,13 @@ extends Node2D
 
 const TILE := 64
 const MAIN_LEVEL := "res://levels/level1.txt"
+const POWERUP_SCENE := preload("res://scenes/powerup.tscn")
+const COIN_TEXTURE := preload("res://assets/coin.png")
+
+## 頂出來的金幣飛多高、飛多久。飛完就消失，不必玩家再去撿——
+## 他已經頂到了，再讓他追一顆金幣只是多餘的操作。
+const COIN_POP_HEIGHT := 96.0
+const COIN_POP_TIME := 0.45
 
 var stats := RunStats.new()
 
@@ -35,6 +42,39 @@ func _load_level(path: String) -> void:
 	stats = RunStats.new(_map.time_limit)
 	_player.respawn_at(_spawn)
 	_player.set_camera_bounds(result["level_size"])
+	_connect_level_nodes()
+
+
+## 關卡裡的節點是建構器生成的，Main 建完才接訊號。
+## 子節點不知道 Main 存在，只管發訊號。
+func _connect_level_nodes() -> void:
+	for node in _entities.get_children():
+		if node.is_in_group("block"):
+			node.popped_coin.connect(_on_block_popped_coin)
+			node.popped_milk.connect(_on_block_popped_milk)
+
+
+func _on_block_popped_coin(position: Vector2) -> void:
+	stats.add_coin()
+	_spawn_coin_pop(position)
+
+
+func _on_block_popped_milk(position: Vector2) -> void:
+	var milk := POWERUP_SCENE.instantiate()
+	milk.position = position
+	_entities.add_child(milk)
+
+
+func _spawn_coin_pop(position: Vector2) -> void:
+	var sprite := Sprite2D.new()
+	sprite.texture = COIN_TEXTURE
+	sprite.position = position
+	_entities.add_child(sprite)
+	var tween := sprite.create_tween().set_parallel()
+	tween.tween_property(sprite, "position:y", position.y - COIN_POP_HEIGHT,
+		COIN_POP_TIME).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tween.tween_property(sprite, "modulate:a", 0.0, COIN_POP_TIME)
+	tween.chain().tween_callback(sprite.queue_free)
 
 
 func _connect_player() -> void:
@@ -44,6 +84,7 @@ func _connect_player() -> void:
 	_player.enemy_stomped.connect(_on_enemy_stomped)
 	_player.enemy_touched.connect(_on_hazard_touched)
 	_player.died.connect(_on_player_died)
+	_player.milk_collected.connect(_on_milk_collected)
 
 
 func _on_coin_collected() -> void:
@@ -52,6 +93,11 @@ func _on_coin_collected() -> void:
 
 func _on_goal_reached() -> void:
 	stats.finish()
+
+
+func _on_milk_collected() -> void:
+	if _player.grow() == "bonus":
+		stats.add_milk_bonus()
 
 
 func _on_enemy_stomped(kind: int) -> void:

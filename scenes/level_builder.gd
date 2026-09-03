@@ -16,6 +16,7 @@ const SOURCE_ID := 0
 const COIN_SCENE := preload("res://scenes/coin.tscn")
 const GOAL_SCENE := preload("res://scenes/goal_flag.tscn")
 const ENEMY_SCENE := preload("res://scenes/enemy.tscn")
+const BLOCK_SCENE := preload("res://scenes/question_block.tscn")
 
 ## 進 TileMapLayer 的地形。尖刺也進，但不給碰撞多邊形——它靠 Area2D 傷人，
 ## 玩家該踩得進去而不是站在上面。
@@ -81,6 +82,13 @@ static func build(map: LevelMap, tile_layer: TileMapLayer,
 		for x in map.width:
 			var cell := Vector2i(x, y)
 			var kind := map.terrain_at(cell)
+			if BlockRules.needs_node(kind):
+				var block := BLOCK_SCENE.instantiate()
+				block.setup(kind)
+				block.position = cell_center(cell)
+				entity_root.add_child(block)
+				built += 1
+				continue
 			if not TILEMAP_KINDS.has(kind):
 				continue
 			tile_layer.set_cell(cell, SOURCE_ID,

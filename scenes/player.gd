@@ -68,6 +68,7 @@ func _physics_process(delta: float) -> void:
 		_punch_scale(Vector2(1.25, 0.78), 0.18)
 	_was_on_floor = is_on_floor()
 
+	_resolve_ceiling_hits()
 	_resolve_enemy_contacts()
 	state.advance(delta)
 	_update_visual(delta)
@@ -191,6 +192,17 @@ func _update_visual(delta: float) -> void:
 
 	_camera.offset.x = move_toward(_camera.offset.x, _facing * CAMERA_LOOKAHEAD,
 		240.0 * delta)
+
+
+## 頂磚塊。撞到天花板時碰撞法線是朝下的（從表面指向玩家）。
+func _resolve_ceiling_hits() -> void:
+	for i in get_slide_collision_count():
+		var collision := get_slide_collision(i)
+		if collision.get_normal().y < 0.7:
+			continue
+		var collider := collision.get_collider()
+		if collider != null and collider.has_method("hit_from_below"):
+			collider.hit_from_below(state.is_big())
 
 
 ## 每幀輪詢重疊的敵人，而不是只靠 body_entered 訊號。
