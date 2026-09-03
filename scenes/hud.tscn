@@ -1,0 +1,77 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scenes/hud.gd" id="1"]
+[ext_resource type="FontFile" path="res://assets/fonts/NotoSansTC-Bold.otf" id="2"]
+
+[sub_resource type="LabelSettings" id="stat_style"]
+font = ExtResource("2")
+font_size = 28
+outline_size = 8
+outline_color = Color(0.08, 0.1, 0.14, 1)
+
+[sub_resource type="LabelSettings" id="title_style"]
+font = ExtResource("2")
+font_size = 64
+outline_size = 14
+outline_color = Color(0.08, 0.1, 0.14, 1)
+
+[sub_resource type="LabelSettings" id="subtitle_style"]
+font = ExtResource("2")
+font_size = 26
+outline_size = 10
+outline_color = Color(0.08, 0.1, 0.14, 1)
+
+[node name="HUD" type="CanvasLayer"]
+script = ExtResource("1")
+
+[node name="Dim" type="ColorRect" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0.05, 0.07, 0.11, 0.62)
+
+[node name="Top" type="HBoxContainer" parent="."]
+anchor_right = 1.0
+offset_left = 32.0
+offset_top = 20.0
+offset_right = -32.0
+offset_bottom = 64.0
+theme_override_constants/separation = 48
+alignment = 1
+
+[node name="Score" type="Label" parent="Top"]
+text = "分數 000000"
+label_settings = SubResource("stat_style")
+
+[node name="Coins" type="Label" parent="Top"]
+text = "金幣 0"
+label_settings = SubResource("stat_style")
+
+[node name="Lives" type="Label" parent="Top"]
+text = "生命 3"
+label_settings = SubResource("stat_style")
+
+[node name="Time" type="Label" parent="Top"]
+text = "時間 300"
+label_settings = SubResource("stat_style")
+
+[node name="Message" type="VBoxContainer" parent="."]
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -600.0
+offset_top = -130.0
+offset_right = 600.0
+offset_bottom = 130.0
+theme_override_constants/separation = 28
+alignment = 1
+
+[node name="Title" type="Label" parent="Message"]
+text = "口袋牛牛大冒險"
+horizontal_alignment = 1
+label_settings = SubResource("title_style")
+
+[node name="Subtitle" type="Label" parent="Message"]
+text = "按空白鍵開始"
+horizontal_alignment = 1
+label_settings = SubResource("subtitle_style")

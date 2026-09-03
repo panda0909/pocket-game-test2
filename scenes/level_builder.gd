@@ -78,7 +78,11 @@ static func build(map: LevelMap, tile_layer: TileMapLayer,
 	tile_layer.clear()
 	if tile_layer.tile_set == null:
 		tile_layer.tile_set = build_tileset()
+	# 先 remove_child 再 queue_free。queue_free 是延後執行的，只呼叫它的話
+	# 舊節點在這一幀還留在樹上，Main 接訊號時會連到已經作廢的節點，
+	# 第二次載入關卡就會噴「訊號已經連過了」。
 	for child in entity_root.get_children():
+		entity_root.remove_child(child)
 		child.queue_free()
 
 	var built := 0

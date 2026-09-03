@@ -15,6 +15,7 @@ const COIN_POP_HEIGHT := 96.0
 const COIN_POP_TIME := 0.45
 
 var stats := RunStats.new()
+var flow_state := Flow.TITLE
 
 var _map: LevelMap
 var _level_path := MAIN_LEVEL
@@ -22,10 +23,12 @@ var _spawn := Vector2.ZERO
 ## 進水管前站的位置。從暗房回來時要放回這裡，玩家才不會迷失方向。
 var _return_position := Vector2.INF
 var _in_room := false
+var _death_pending := false
 
 @onready var _tiles: TileMapLayer = $Tiles
 @onready var _entities: Node2D = $Entities
 @onready var _player: Player = $Player
+@onready var _hud: HUD = $HUD
 
 
 func _ready() -> void:
@@ -33,6 +36,7 @@ func _ready() -> void:
 		_level_path = "res://levels/dev.txt"
 	_load_level(_level_path)
 	_connect_player()
+	_enter_state(Flow.TITLE)
 
 
 func _load_level(path: String, spawn_override := Vector2.INF) -> void:
@@ -128,7 +132,7 @@ func _on_coin_collected() -> void:
 
 
 func _on_goal_reached() -> void:
-	stats.finish()
+	_advance("goal")
 
 
 ## 進水管。暗房是另一張關卡檔，整張換掉；分數與計時延續。
@@ -193,14 +197,97 @@ func _on_hazard_touched() -> void:
 
 
 func _on_player_died() -> void:
-	stats.lose_life()
+	_kill_player()
+
+
+## 掉出關卡下緣即死。用關卡高度加一格當界線，玩家看得到自己掉下去。
+func _physics_process(_delta: float) -> void:
+	if not Flow.counts_down(flow_state) or _map == null:
+		return
+	if _player.global_position.y > _map.pixel_size(TILE).y + TILE:
+		_kill_player()
+
+
+## --- 流程 ---
+
+func _unhandled_input(event: InputEvent) -> void:
+	if not event.is_action_pressed("jump"):
+		return
+	match flow_state:
+		Flow.TITLE:
+			_advance("start")
+		Flow.GAME_OVER, Flow.CLEARED:
+			_advance("restart")
+
+
+func _process(delta: float) -> void:
+	if not Flow.counts_down(flow_state):
+		return
+	if stats.tick(delta):
+		_kill_player()
+	_hud.update_stats(stats, _player.state.is_big())
+
+
+func _advance(event: String) -> void:
+	var next := Flow.next(flow_state, event, stats.lives)
+	if next == flow_state and event != "died":
+		return
+	_enter_state(next, event)
+
+
+func _enter_state(state: int, event := "") -> void:
+	flow_state = state
+	_player.control_enabled = Flow.accepts_input(state)
+	match state:
+		Flow.TITLE:
+			_restart_run()
+			_hud.show_message("口袋牛牛大冒險",
+				"按空白鍵開始　　方向鍵／WASD 移動　空白鍵跳　Shift 丟金幣　↓ 進水管")
+		Flow.PLAYING:
+			_hud.hide_message()
+			if event == "died":
+				_respawn()
+		Flow.GAME_OVER:
+			_hud.show_message("遊戲結束", "分數 %d　　按空白鍵回到標題" % stats.score)
+		Flow.CLEARED:
+			stats.finish()
+			_hud.show_message("通關！", "分數 %d　　按空白鍵再玩一次" % stats.score)
+	_hud.update_stats(stats, _player.state.is_big())
+
+
+func _restart_run() -> void:
+	_in_room = false
+	_return_position = Vector2.INF
+	_load_level(_level_path)
+
+
+func _respawn() -> void:
+	if _in_room:
+		_in_room = false
+		_return_position = Vector2.INF
+		_load_level(_level_path)
+	stats.restart_level()
 	_player.respawn_at(_spawn)
+
+
+## 死亡統一走這裡：先扣命再問流程要去哪，順序反了會出現
+## 「明明還有命卻結束了」這種最惱人的 bug。
+func _kill_player() -> void:
+	if _death_pending or not Flow.counts_down(flow_state):
+		return
+	_death_pending = true
+	_player.control_enabled = false
+	stats.lose_life()
+	await get_tree().create_timer(0.9).timeout
+	_death_pending = false
+	_advance("died")
 
 
 # --- 開發工具用（tools/capture.gd）---
 
 func begin_game() -> void:
-	pass
+	if flow_state == Flow.TITLE:
+		_advance("start")
 
 
 func teleport_player(cells: int) -> void:
