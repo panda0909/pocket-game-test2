@@ -214,17 +214,22 @@ func _resolve_enemy_contacts() -> void:
 	for body in $TouchBox.get_overlapping_bodies():
 		if not body.is_in_group("enemy"):
 			continue
-		var enemy := body as Enemy
-		var enemy_center_y := enemy.global_position.y - enemy.half_height
-		var relative_y := global_position.y - enemy_center_y
-		if EnemyRules.is_stompable(enemy.kind) \
-				and EnemyRules.is_stomp(velocity.y, relative_y, enemy.half_height):
-			var kind := enemy.kind
-			enemy.die()
-			apply_stomp(Input.is_action_pressed("jump"))
-			enemy_stomped.emit(kind)
-		else:
+		var half: float = body.half_height
+		var relative_y: float = global_position.y - (body.global_position.y - half)
+		var stompable: bool = body.is_in_group("boss") \
+			or EnemyRules.is_stompable(body.kind)
+		if not (stompable and EnemyRules.is_stomp(velocity.y, relative_y, half)):
 			enemy_touched.emit()
+			return
+
+		apply_stomp(Input.is_action_pressed("jump"))
+		if body.has_method("take_stomp"):
+			# Boss 踩了是扣血不是消失，回彈照給——不然玩家會黏在牠頭上。
+			body.take_stomp()
+		else:
+			var kind: int = body.kind
+			body.die()
+			enemy_stomped.emit(kind)
 		return
 
 

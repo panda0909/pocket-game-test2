@@ -1,0 +1,46 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Texture2D" path="res://assets/enemies/arrow.png" id="1"]
+
+[sub_resource type="CircleShape2D" id="shape"]
+radius = 20.0
+
+[sub_resource type="GDScript" id="script"]
+script/source = "extends Area2D
+
+## Boss 丟出來的跌停箭頭。直線飛，碰到玩家算受傷（它在 hazard 群組，
+## 玩家的 TouchBox 已經在處理這一類）。
+
+const SPEED := 300.0
+const LIFETIME := 4.0
+
+var _direction := Vector2.DOWN
+var _age := 0.0
+
+func launch(direction: Vector2) -> void:
+	_direction = direction.normalized()
+	rotation = _direction.angle() - PI * 0.5
+
+func _ready() -> void:
+	add_to_group(\"hazard\")
+
+func _physics_process(delta: float) -> void:
+	_age += delta
+	if _age > LIFETIME:
+		queue_free()
+		return
+	position += _direction * SPEED * delta
+"
+
+[node name="BossShot" type="Area2D"]
+collision_layer = 4
+collision_mask = 0
+monitoring = false
+script = SubResource("script")
+
+[node name="Sprite" type="Sprite2D" parent="."]
+texture = ExtResource("1")
+scale = Vector2(0.8, 0.8)
+
+[node name="Shape" type="CollisionShape2D" parent="."]
+shape = SubResource("shape")

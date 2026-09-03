@@ -7,6 +7,7 @@ extends Area2D
 ## 拋物線逼他要選位置和時機。
 
 signal hit_enemy(kind: int)
+signal hit_boss
 
 const SPEED := 460.0
 const GRAVITY := 900.0
@@ -49,7 +50,11 @@ func _physics_process(delta: float) -> void:
 
 
 func _on_body_entered(body: Node2D) -> void:
-	if body.is_in_group("enemy"):
+	if body.is_in_group("boss"):
+		body.take_shot()
+		hit_boss.emit()
+		queue_free()
+	elif body.is_in_group("enemy"):
 		var enemy := body as Enemy
 		var kind := enemy.kind
 		enemy.die()

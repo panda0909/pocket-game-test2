@@ -20,6 +20,7 @@ const BLOCK_SCENE := preload("res://scenes/question_block.tscn")
 const PLATFORM_SCENE := preload("res://scenes/moving_platform.tscn")
 const PIPE_SCENE := preload("res://scenes/pipe.tscn")
 const CHECKPOINT_SCENE := preload("res://scenes/checkpoint.tscn")
+const BOSS_SCENE := preload("res://scenes/boss.tscn")
 
 ## 進 TileMapLayer 的地形。尖刺也進，但不給碰撞多邊形——它靠 Area2D 傷人，
 ## 玩家該踩得進去而不是站在上面。
@@ -166,4 +167,8 @@ static func _make_entity(entity: Dictionary) -> Node2D:
 			var checkpoint := CHECKPOINT_SCENE.instantiate()
 			checkpoint.position = cell_bottom(cell)
 			return checkpoint
+		"boss":
+			var boss := BOSS_SCENE.instantiate()
+			boss.position = cell_bottom(cell)
+			return boss
 	return null

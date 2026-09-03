@@ -7,6 +7,7 @@ const MAIN_LEVEL := "res://levels/level1.txt"
 const POWERUP_SCENE := preload("res://scenes/powerup.tscn")
 const COIN_TEXTURE := preload("res://assets/coin.png")
 const COIN_SHOT_SCENE := preload("res://scenes/coin_shot.tscn")
+const BOSS_SHOT_SCENE := preload("res://scenes/boss_shot.tscn")
 
 ## 頂出來的金幣飛多高、飛多久。飛完就消失，不必玩家再去撿——
 ## 他已經頂到了，再讓他追一顆金幣只是多餘的操作。
@@ -61,6 +62,29 @@ func _connect_level_nodes() -> void:
 		if node.is_in_group("block"):
 			node.popped_coin.connect(_on_block_popped_coin)
 			node.popped_milk.connect(_on_block_popped_milk)
+		elif node.is_in_group("boss"):
+			node.defeated.connect(_on_boss_defeated)
+			node.spawned_projectile.connect(_on_boss_projectile)
+
+	# Boss 還活著時旗竿不能碰。不然玩家可以直接繞過關底衝終點。
+	_set_goal_active(get_tree().get_nodes_in_group("boss").is_empty())
+
+
+func _set_goal_active(active: bool) -> void:
+	for node in get_tree().get_nodes_in_group("goal"):
+		node.set_active(active)
+
+
+func _on_boss_defeated() -> void:
+	stats.add_score(BossRules.SCORE)
+	_set_goal_active(true)
+
+
+func _on_boss_projectile(origin: Vector2, direction: Vector2) -> void:
+	var shot := BOSS_SHOT_SCENE.instantiate()
+	shot.position = origin
+	_entities.add_child(shot)
+	shot.launch(direction)
 
 
 func _on_block_popped_coin(position: Vector2) -> void:
@@ -148,6 +172,11 @@ func _on_throw_requested(direction: int, origin: Vector2) -> void:
 	_entities.add_child(shot)
 	shot.launch(direction)
 	shot.hit_enemy.connect(_on_enemy_stomped)
+	shot.hit_boss.connect(_on_boss_shot)
+
+
+func _on_boss_shot() -> void:
+	pass
 
 
 func _on_milk_collected() -> void:
