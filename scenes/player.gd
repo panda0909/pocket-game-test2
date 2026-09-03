@@ -27,6 +27,9 @@ const SMALL_BODY := Vector2(56, 120)
 const CAMERA_LOOKAHEAD := 120.0
 ## 接觸框比身體往下多伸出的距離，讓腳底剛碰到敵人的那一幀就偵測得到。
 const TOUCH_FOOT_MARGIN := 8.0
+## 衝刺時的前傾角度與收放速度（弧度）。
+const SPRINT_LEAN := 0.09
+const LEAN_SPEED := 0.7
 
 ## 跑步時的身體起伏。頻率隨速度變化，站著不動時完全靜止。
 const RUN_BOB_HEIGHT := 5.0
@@ -98,11 +101,14 @@ func _physics_process(delta: float) -> void:
 
 func _read_input() -> Dictionary:
 	if not control_enabled:
-		return {"dir": 0.0, "jump_pressed": false, "jump_held": false}
+		return {"dir": 0.0, "jump_pressed": false, "jump_held": false, "sprint": false}
 	return {
 		"dir": Input.get_axis("move_left", "move_right"),
 		"jump_pressed": Input.is_action_just_pressed("jump"),
 		"jump_held": Input.is_action_pressed("jump"),
+		# Shift 一鍵兩用：按住是衝刺，按下的那一幀才丟金幣（見下方 throw）。
+		# 衝刺不需要變大，不然小牛全程只能慢走。
+		"sprint": Input.is_action_pressed("throw"),
 	}
 
 
@@ -191,7 +197,8 @@ func _update_visual(delta: float) -> void:
 	if not is_zero_approx(velocity.x):
 		_facing = signi(int(velocity.x))
 
-	var speed_ratio := absf(velocity.x) / PlayerPhysics.MAX_RUN_SPEED
+	# 分母用衝刺速度，否則衝刺時比值會超過 1，跑步循環與彈跳幅度都算爆。
+	var speed_ratio := minf(absf(velocity.x) / PlayerPhysics.SPRINT_SPEED, 1.0)
 	var cycle_scale := Vector2.ONE
 	var bob := 0.0
 
@@ -214,6 +221,13 @@ func _update_visual(delta: float) -> void:
 		base * _impulse_scale.x * cycle_scale.x * _facing,
 		base * _impulse_scale.y * cycle_scale.y)
 	_sprite.position.y = bob
+
+	# 衝刺時整個身體往前傾。這是「我在衝」的唯一視覺提示——
+	# 光靠位移變快，玩家在捲動的背景前面分辨不出來。
+	var lean := 0.0
+	if absf(velocity.x) > PlayerPhysics.MAX_RUN_SPEED + 10.0:
+		lean = SPRINT_LEAN * _facing
+	_sprite.rotation = move_toward(_sprite.rotation, lean, LEAN_SPEED * delta)
 	_sprite.modulate.a = 0.35 if state.is_invincible() and int(_cycle * 24.0) % 2 == 0 else 1.0
 
 	_camera.offset.x = move_toward(_camera.offset.x, _facing * CAMERA_LOOKAHEAD,

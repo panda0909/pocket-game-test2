@@ -30,6 +30,9 @@ func _ready() -> void:
 	await _check_side_contact_hurts_instead()
 	await _check_every_character_is_selectable()
 	await _check_select_arrows_cycle()
+	await _check_sprint_is_faster()
+	await _check_small_player_can_sprint()
+	await _check_tapping_shift_throws_a_coin()
 
 	print("---")
 	print("通過 %d　失敗 %d" % [_passed, _failed])
@@ -302,6 +305,84 @@ func _first_stompable(main: Node) -> Node2D:
 				and EnemyRules.is_stompable(node.kind):
 			return node
 	return null
+
+
+## 按住 Shift 在同樣幀數內要跑得比不按遠。
+## 單元測試證明速度上限對，這裡證明它真的接到節點上。
+func _check_sprint_is_faster() -> void:
+	var walk := await _measure_run(false, false)
+	var dash := await _measure_run(true, false)
+	_expect(dash > walk * 1.2, "按住 Shift 跑得比不按明顯遠",
+		"走路 %.0f px、衝刺 %.0f px" % [walk, dash])
+
+
+## 衝刺不該要求變大。小牛如果只能慢走，整個前半段關卡會很拖。
+func _check_small_player_can_sprint() -> void:
+	var small_dash := await _measure_run(true, false)
+	var small_walk := await _measure_run(false, false)
+	_expect(small_dash > small_walk * 1.2, "小牛按住 Shift 也衝得起來",
+		"走路 %.0f px、衝刺 %.0f px" % [small_walk, small_dash])
+
+
+## 量測 40 個物理幀內往右跑了多遠。
+func _measure_run(sprint: bool, big: bool) -> float:
+	var main := await _make_main()
+	main.begin_game()
+	var player: Player = main.get_node("Player")
+	if big:
+		player.grow()
+	for i in 60:
+		await get_tree().physics_frame
+		if player.is_on_floor():
+			break
+
+	var start_x := player.global_position.x
+	Input.action_press("move_right")
+	if sprint:
+		Input.action_press("throw")
+	for i in 40:
+		await get_tree().physics_frame
+	Input.action_release("move_right")
+	if sprint:
+		Input.action_release("throw")
+	var travelled := player.global_position.x - start_x
+	main.queue_free()
+	await get_tree().process_frame
+	return travelled
+
+
+## Shift 一鍵兩用的另一半：按下的那一幀，大牛有金幣時會丟出一枚。
+## 這是我提醒過的代價（起衝會漏一枚金幣），使用者選了這個方案，
+## 所以把它釘成明確的預期行為而不是意外。
+func _check_tapping_shift_throws_a_coin() -> void:
+	var main := await _make_main()
+	main.begin_game()
+	var player: Player = main.get_node("Player")
+	player.grow()
+	for i in 5:
+		main.stats.add_coin()
+	var before: int = main.stats.coins
+
+	await _tap_action("throw")
+	_expect(main.stats.coins == before - 1, "輕點 Shift 會丟出一枚金幣",
+		"金幣 %d -> %d" % [before, main.stats.coins])
+
+	# 沒金幣時 Shift 應該是純衝刺，不會扣到負的
+	while main.stats.spend_coin():
+		pass
+	await _tap_action("throw")
+	_expect(main.stats.coins == 0, "彈藥空了按 Shift 不會扣成負數",
+		"金幣=%d" % main.stats.coins)
+	main.queue_free()
+	await get_tree().process_frame
+
+
+func _tap_action(action: String) -> void:
+	Input.action_press(action)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	Input.action_release(action)
+	await get_tree().physics_frame
 
 
 func _check_levels_parse() -> void:

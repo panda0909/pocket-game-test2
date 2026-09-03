@@ -9,11 +9,15 @@ extends RefCounted
 ##   3. 土狼時間 —— 踏出平台邊緣後還有 0.1 秒能跳，玩家不會覺得自己被判太嚴
 ##   4. 跳躍緩衝 —— 落地前 0.12 秒內按的跳，落地瞬間自動生效
 ##   5. 空中加速比地面弱，空中不煞停 —— 跳出去就得為那個方向負責
+##   6. 衝刺只是把速度上限拉高 —— 放開時用同一組加速度收回來，不會頓一下
 ##
 ## 3 和 4 是「明明按了卻沒跳」這種挫敗感的解藥，玩家永遠不會注意到它們存在，
 ## 但拿掉之後整個遊戲會變得很難操作。
 
 const MAX_RUN_SPEED := 280.0
+## 按住 Shift 的衝刺速度。1.5 倍走路速度——再快關卡就顯得太短，
+## 再慢玩家感覺不出按了有差。
+const SPRINT_SPEED := 420.0
 const GROUND_ACCEL := 1600.0
 const GROUND_BRAKE := 2000.0
 const AIR_ACCEL := 1100.0
@@ -38,6 +42,8 @@ static func step(velocity: Vector2, input: Dictionary, on_floor: bool,
 	var dir: float = input.get("dir", 0.0)
 	var jump_pressed: bool = input.get("jump_pressed", false)
 	var jump_held: bool = input.get("jump_held", false)
+	# 舊的呼叫沒有這個鍵，預設當走路——現有測試因此不必全部改。
+	var sprint: bool = input.get("sprint", false)
 
 	var coyote: float = timers.get("coyote", 0.0)
 	var buffer: float = timers.get("buffer", 0.0)
@@ -49,7 +55,10 @@ static func step(velocity: Vector2, input: Dictionary, on_floor: bool,
 
 	if not is_zero_approx(dir):
 		var accel := GROUND_ACCEL if on_floor else AIR_ACCEL
-		new_velocity.x = move_toward(new_velocity.x, dir * MAX_RUN_SPEED, accel * delta)
+		var top_speed := SPRINT_SPEED if sprint else MAX_RUN_SPEED
+		# 放開衝刺時 move_toward 會用同一組加速度把速度收回走路上限，
+		# 所以鬆手是自然減速，不是瞬間掉一截。
+		new_velocity.x = move_toward(new_velocity.x, dir * top_speed, accel * delta)
 	elif on_floor:
 		new_velocity.x = move_toward(new_velocity.x, 0.0, GROUND_BRAKE * delta)
 
@@ -83,6 +92,14 @@ static func stomp_velocity(jump_held: bool) -> float:
 ## 理論最大跳躍高度，供關卡排版與測試對照設計值。
 static func jump_height() -> float:
 	return (JUMP_VELOCITY * JUMP_VELOCITY) / (2.0 * GRAVITY_RISE)
+
+
+## 以指定水平速度滿跳時能跨過的水平距離。關卡排版與測試用它對照
+## 「這個坑跳不跳得過去」。
+static func jump_distance(horizontal_speed: float) -> float:
+	var rise_time := absf(JUMP_VELOCITY) / GRAVITY_RISE
+	var fall_time := sqrt(2.0 * jump_height() / GRAVITY_FALL)
+	return horizontal_speed * (rise_time + fall_time)
 
 
 static func new_timers() -> Dictionary:

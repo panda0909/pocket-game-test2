@@ -5,6 +5,23 @@ const D := 1.0 / 60.0
 func _ipt(dir: float, pressed := false, held := false) -> Dictionary:
 	return {"dir": dir, "jump_pressed": pressed, "jump_held": held}
 
+
+func _sprint(dir: float, pressed := false, held := false) -> Dictionary:
+	var input := _ipt(dir, pressed, held)
+	input["sprint"] = true
+	return input
+
+
+## 跑到速度不再變化為止，回傳最終水平速度。
+func _run_until_stable(input: Dictionary, frames := 180) -> float:
+	var v := Vector2.ZERO
+	var t := _timers(PlayerPhysics.COYOTE_TIME)
+	for i in frames:
+		var r := PlayerPhysics.step(v, input, true, D, t)
+		v = r["velocity"]
+		t = r["timers"]
+	return v.x
+
 func _timers(coyote := 0.0, buffer := 0.0) -> Dictionary:
 	return {"coyote": coyote, "buffer": buffer}
 
@@ -108,3 +125,56 @@ func test_terminal_fall_speed_capped() -> void:
 
 func test_stomp_bounce_higher_when_jump_held() -> void:
 	assert_lt(PlayerPhysics.stomp_velocity(true), PlayerPhysics.stomp_velocity(false))
+
+
+## --- 衝刺 ---
+
+func test_sprint_is_faster_than_walking() -> void:
+	assert_gt(PlayerPhysics.SPRINT_SPEED, PlayerPhysics.MAX_RUN_SPEED)
+
+func test_holding_sprint_reaches_sprint_speed() -> void:
+	assert_almost_eq(_run_until_stable(_sprint(1.0)),
+		PlayerPhysics.SPRINT_SPEED, 1.0)
+
+func test_without_sprint_caps_at_walk_speed() -> void:
+	assert_almost_eq(_run_until_stable(_ipt(1.0)),
+		PlayerPhysics.MAX_RUN_SPEED, 1.0)
+
+## 沒有 sprint 這個鍵的舊呼叫要當走路處理，現有的測試才不用全部改。
+func test_missing_sprint_key_defaults_to_walking() -> void:
+	var r := PlayerPhysics.step(Vector2(PlayerPhysics.MAX_RUN_SPEED, 0),
+		{"dir": 1.0, "jump_pressed": false, "jump_held": false}, true, D, _timers(0.1))
+	assert_almost_eq(r["velocity"].x, PlayerPhysics.MAX_RUN_SPEED, 0.01)
+
+## 放開 Shift 要自然減速回走路速度，不是瞬間掉一截。
+func test_releasing_sprint_decelerates_instead_of_snapping() -> void:
+	var v := Vector2(PlayerPhysics.SPRINT_SPEED, 0)
+	var t := _timers(0.1)
+	var first := PlayerPhysics.step(v, _ipt(1.0), true, D, t)
+	var after_one_frame: float = first["velocity"].x
+	assert_lt(after_one_frame, PlayerPhysics.SPRINT_SPEED, "應該開始減速")
+	assert_gt(after_one_frame, PlayerPhysics.MAX_RUN_SPEED,
+		"一幀就掉到走路速度等於瞬間掉速")
+
+	v = first["velocity"]
+	t = first["timers"]
+	for i in 60:
+		var r := PlayerPhysics.step(v, _ipt(1.0), true, D, t)
+		v = r["velocity"]
+		t = r["timers"]
+	assert_almost_eq(v.x, PlayerPhysics.MAX_RUN_SPEED, 1.0)
+
+func test_sprint_works_in_both_directions() -> void:
+	assert_almost_eq(_run_until_stable(_sprint(-1.0)),
+		-PlayerPhysics.SPRINT_SPEED, 1.0)
+
+## 關卡「所有坑不超過 4 格」那條約束是照走路速度算的。衝刺讓坑更好跳，
+## 所以約束仍然成立——但如果有人把 SPRINT_SPEED 設得比走路慢，那條約束
+## 就會靜靜失效。這條測試防的是那個。
+func test_sprint_only_ever_lengthens_the_jump() -> void:
+	assert_gte(PlayerPhysics.jump_distance(PlayerPhysics.SPRINT_SPEED),
+		PlayerPhysics.jump_distance(PlayerPhysics.MAX_RUN_SPEED))
+
+func test_walk_jump_still_clears_a_four_cell_gap() -> void:
+	assert_gt(PlayerPhysics.jump_distance(PlayerPhysics.MAX_RUN_SPEED),
+		4.0 * 64.0)
