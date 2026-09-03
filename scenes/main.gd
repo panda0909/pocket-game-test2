@@ -6,6 +6,7 @@ const TILE := 64
 const MAIN_LEVEL := "res://levels/level1.txt"
 const POWERUP_SCENE := preload("res://scenes/powerup.tscn")
 const COIN_TEXTURE := preload("res://assets/coin.png")
+const COIN_SHOT_SCENE := preload("res://scenes/coin_shot.tscn")
 
 ## 頂出來的金幣飛多高、飛多久。飛完就消失，不必玩家再去撿——
 ## 他已經頂到了，再讓他追一顆金幣只是多餘的操作。
@@ -85,6 +86,7 @@ func _connect_player() -> void:
 	_player.enemy_touched.connect(_on_hazard_touched)
 	_player.died.connect(_on_player_died)
 	_player.milk_collected.connect(_on_milk_collected)
+	_player.throw_requested.connect(_on_throw_requested)
 
 
 func _on_coin_collected() -> void:
@@ -93,6 +95,18 @@ func _on_coin_collected() -> void:
 
 func _on_goal_reached() -> void:
 	stats.finish()
+
+
+## 玩家按了丟金幣。條件由 ThrowRules 判定——體型不對或沒彈藥時
+## 不生成投射物，也不扣任何東西。
+func _on_throw_requested(direction: int, origin: Vector2) -> void:
+	if not ThrowRules.fire(_player.state, stats):
+		return
+	var shot := COIN_SHOT_SCENE.instantiate()
+	shot.position = origin
+	_entities.add_child(shot)
+	shot.launch(direction)
+	shot.hit_enemy.connect(_on_enemy_stomped)
 
 
 func _on_milk_collected() -> void:
