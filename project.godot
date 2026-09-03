@@ -59,5 +59,7 @@ throw={
 
 [rendering]
 
+; 關卡邊緣之外露出的區域用天空色填滿，才不會看到引擎預設的灰。
+environment/defaults/default_clear_color=Color(0.494, 0.769, 0.933, 1)
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"

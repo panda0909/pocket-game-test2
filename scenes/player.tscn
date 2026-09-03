@@ -1,0 +1,41 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scenes/player.gd" id="1"]
+[ext_resource type="Texture2D" path="res://assets/characters/red_bull.png" id="2"]
+
+[sub_resource type="RectangleShape2D" id="body_shape"]
+size = Vector2(56, 120)
+
+[sub_resource type="RectangleShape2D" id="touch_shape"]
+size = Vector2(48, 103)
+
+[node name="Player" type="CharacterBody2D"]
+collision_layer = 64
+collision_mask = 1
+script = ExtResource("1")
+
+[node name="Sprite" type="Sprite2D" parent="."]
+texture = ExtResource("2")
+offset = Vector2(0, -90)
+scale = Vector2(0.71111, 0.71111)
+
+[node name="BodyShape" type="CollisionShape2D" parent="."]
+position = Vector2(0, -60)
+shape = SubResource("body_shape")
+
+[node name="TouchBox" type="Area2D" parent="."]
+collision_layer = 8
+collision_mask = 22
+monitorable = false
+
+[node name="TouchShape" type="CollisionShape2D" parent="TouchBox"]
+position = Vector2(0, -60)
+shape = SubResource("touch_shape")
+
+[node name="Camera" type="Camera2D" parent="."]
+position = Vector2(0, -80)
+position_smoothing_enabled = true
+position_smoothing_speed = 7.0
+drag_vertical_enabled = true
+drag_top_margin = 0.12
+drag_bottom_margin = 0.12
