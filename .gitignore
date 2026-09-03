@@ -2,7 +2,7 @@
 .godot/
 /android/
 
-# 匯出產物
+# 匯出產物（含 tools/publish_pages.sh 用的暫存 repo）
 /build/
 /export/
 

@@ -1,5 +1,7 @@
 # 口袋牛牛大冒險
 
+**線上試玩：<https://panda0909.github.io/pocket-game-test2/>**
+
 用「口袋」品牌吉祥物紅牛做的橫向捲軸平台遊戲，以 Godot 4.7 開發，可匯出為網頁版。
 玩法參考《超級馬利歐》：跑、跳、踩敵人、頂磚塊、吃道具變大，走完一條精心設計的
 長關卡。
@@ -76,6 +78,16 @@
     python3 -m http.server 8000 --directory build/web
 
 然後開啟 <http://localhost:8000>。
+
+## 發佈到 GitHub Pages
+
+    tools/publish_pages.sh
+
+這支腳本會重新匯出，然後把產物推到 `gh-pages` 分支（每次重建成單一 commit，
+避免每發佈一次就在歷史裡多存一份將近 40 MB 的 wasm）。`main` 只放原始碼。
+
+**匯出設定的 `variant/thread_support` 必須維持 `false`。** GitHub Pages 沒辦法
+設定 COOP／COEP 標頭，開了執行緒支援的版本在上面會載不起來。
 
 ## 專案結構
 
