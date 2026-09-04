@@ -22,7 +22,9 @@ func mark_taken() -> void:
 	if _taken:
 		return
 	_taken = true
-	monitorable = false
+	# 這裡是從玩家 TouchBox 的 area_entered 訊號一路同步呼叫進來的，物理正在派送
+	# in/out 訊號，直接改 monitorable 會被 Godot 擋掉（Function blocked during in/out signal）。
+	set_deferred(\"monitorable\", false)
 	modulate = Color(1, 1, 1)
 	var tween := create_tween()
 	tween.tween_property(self, \"scale\", Vector2(1.25, 1.25), 0.14)

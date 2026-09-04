@@ -49,6 +49,7 @@ var _was_on_floor := true
 ## 上一幀腳底的位置。踩踏判定要用它，用當幀位置會被幀間位移跳過去。
 var _previous_feet_y := 0.0
 var _standing_pipe := ""
+var _active_texture_path := ""
 
 @onready var _sprite: Sprite2D = $Sprite
 @onready var _body_shape: CollisionShape2D = $BodyShape
@@ -60,7 +61,7 @@ var _standing_pipe := ""
 func set_character(index: int) -> void:
 	character_index = Roster.clamp_index(index)
 	if _sprite != null:
-		_sprite.texture = load(Roster.texture_path(character_index))
+		_refresh_sprite_texture(false)
 
 
 func _ready() -> void:
@@ -124,6 +125,7 @@ func take_hit() -> String:
 	var outcome := state.take_hit()
 	if outcome == "shrank":
 		_apply_size()
+		_refresh_sprite_texture(false)
 		_punch_scale(Vector2(1.35, 0.65), 0.25)
 	elif outcome == "died":
 		died.emit()
@@ -134,6 +136,7 @@ func grow() -> String:
 	var outcome := state.collect_milk()
 	if outcome == "grew":
 		_apply_size()
+		_refresh_sprite_texture(false)
 		_punch_scale(Vector2(0.7, 1.35), 0.28)
 	return outcome
 
@@ -146,6 +149,7 @@ func respawn_at(pos: Vector2) -> void:
 	state.reset()
 	control_enabled = true
 	_impulse_scale = Vector2.ONE
+	_refresh_sprite_texture(false)
 	_apply_size()
 	# 重生要瞬間切鏡，不然相機會從死亡地點慢慢滑回檢查點，
 	# 玩家有一秒鐘不知道自己在哪。
@@ -201,12 +205,16 @@ func _update_visual(delta: float) -> void:
 	var speed_ratio := minf(absf(velocity.x) / PlayerPhysics.SPRINT_SPEED, 1.0)
 	var cycle_scale := Vector2.ONE
 	var bob := 0.0
+	var walk_frame := 0
+	var walking := false
 
 	if is_on_floor() and speed_ratio > 0.05:
+		walking = true
 		_cycle += delta * RUN_CYCLE_SPEED * maxf(speed_ratio, 0.35)
 		var wave := sin(_cycle)
 		bob = -absf(wave) * RUN_BOB_HEIGHT * speed_ratio
 		cycle_scale = Vector2(1.0 + 0.06 * wave, 1.0 - 0.06 * wave)
+		walk_frame = int(floor(_cycle / PI)) % 2
 	elif is_on_floor():
 		_cycle += delta * IDLE_CYCLE_SPEED
 		var breath := (sin(_cycle) + 1.0) * 0.5
@@ -217,6 +225,7 @@ func _update_visual(delta: float) -> void:
 		cycle_scale = Vector2(0.94, 1.06)
 
 	var base := BASE_SPRITE_SCALE * state.body_scale()
+	_refresh_sprite_texture(walking and walk_frame == 1)
 	_sprite.scale = Vector2(
 		base * _impulse_scale.x * cycle_scale.x * _facing,
 		base * _impulse_scale.y * cycle_scale.y)
@@ -232,6 +241,20 @@ func _update_visual(delta: float) -> void:
 
 	_camera.offset.x = move_toward(_camera.offset.x, _facing * CAMERA_LOOKAHEAD,
 		240.0 * delta)
+
+
+func _refresh_sprite_texture(walking: bool) -> void:
+	if _sprite == null:
+		return
+	var path := Roster.texture_path(character_index)
+	if walking:
+		path = Roster.walk_texture_path(character_index)
+	elif state.is_big():
+		path = Roster.big_texture_path(character_index)
+	if path == _active_texture_path:
+		return
+	_sprite.texture = load(path)
+	_active_texture_path = path
 
 
 ## 頂磚塊。撞到天花板時碰撞法線是朝下的（從表面指向玩家）。

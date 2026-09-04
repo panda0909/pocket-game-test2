@@ -28,6 +28,8 @@ func _ready() -> void:
 	await _check_milk_lands_within_reach()
 	await _check_stomping_actually_kills()
 	await _check_side_contact_hurts_instead()
+	await _check_checkpoint_stops_listening_once_taken()
+	await _check_goal_opens_when_coin_shot_kills_boss()
 	await _check_every_character_is_selectable()
 	await _check_select_arrows_cycle()
 	await _check_sprint_is_faster()
@@ -528,5 +530,91 @@ func _check_scoring_and_flow() -> void:
 	await get_tree().process_frame
 	_expect(main.flow_state == Flow.CLEARED, "碰到旗竿即通關",
 		"flow_state=%d" % main.flow_state)
+	main.queue_free()
+	await get_tree().process_frame
+
+
+func _first_in_group(main: Node, group: String) -> Node2D:
+	for node in main.get_node("Entities").get_children():
+		if node.is_in_group(group):
+			return node
+	return null
+
+
+## 走進檢查點之後，它要真的關掉自己的偵測。
+##
+## mark_taken 是在玩家 TouchBox 的 area_entered 訊號裡被同步呼叫的，而 Godot
+## 在物理 in/out 訊號期間會擋掉對 monitorable 的直接賦值（「Function blocked
+## during in/out signal」）。被擋掉時旗子外觀變了、偵測卻沒關。這只有讓玩家
+## 真的用物理重疊去碰才測得到——直接呼叫 mark_taken 不在訊號裡，永遠會過。
+func _check_checkpoint_stops_listening_once_taken() -> void:
+	var main := await _make_main()
+	main.begin_game()
+	var player: Player = main.get_node("Player")
+	var checkpoint: Area2D = _first_in_group(main, "checkpoint")
+	if checkpoint == null:
+		_fail("主關卡有檢查點")
+		main.queue_free()
+		return
+	_ok("主關卡有檢查點")
+	_expect(checkpoint.monitorable, "碰到之前檢查點偵測得到")
+
+	player.respawn_at(checkpoint.global_position)
+	for i in 10:
+		await get_tree().physics_frame
+		if bool(checkpoint.get("_taken")):
+			break
+	# 延後的屬性變更要等訊號結束後那次 flush 才生效，多等一輪。
+	await get_tree().physics_frame
+	await get_tree().process_frame
+
+	_expect(bool(checkpoint.get("_taken")), "走進檢查點會標記為已通過")
+	_expect(main.get("_spawn") == checkpoint.global_position,
+		"重生點移到檢查點", "spawn=%s" % main.get("_spawn"))
+	_expect(not checkpoint.monitorable,
+		"通過後的檢查點不再被偵測（賦值沒有被物理訊號擋掉）")
+	main.queue_free()
+	await get_tree().process_frame
+
+
+## 用金幣打死 Boss 之後，旗竿要真的打得開。
+##
+## 金幣打中 Boss 走的是 CoinShot 的 body_entered 訊號；Boss 的 defeated 沿路
+## 同步傳到 Main，再叫旗竿 set_active(true)。這一整串都還在物理 in/out 訊號裡，
+## monitorable 若直接賦值會被擋掉——旗竿看起來亮了卻碰不到，關卡就此卡死。
+## 踩死 Boss 走的是每幀輪詢、不在訊號裡，所以只有金幣這條路會踩到這個洞。
+func _check_goal_opens_when_coin_shot_kills_boss() -> void:
+	var main := await _make_main()
+	main.begin_game()
+	var boss: Node2D = _first_in_group(main, "boss")
+	var goal: Area2D = _first_in_group(main, "goal")
+	if boss == null or goal == null:
+		_fail("主關卡有 Boss 和旗竿")
+		main.queue_free()
+		return
+	_ok("主關卡有 Boss 和旗竿")
+	_expect(not goal.monitorable, "Boss 活著時旗竿碰不到")
+
+	# 只留一發的血，讓一枚金幣就能收工
+	boss.hp = BossRules.SHOT_DAMAGE
+	var score_before: int = main.stats.score
+	var shot: CoinShot = load("res://scenes/coin_shot.tscn").instantiate()
+	shot.position = boss.global_position + Vector2(0, -boss.half_height)
+	main.get_node("Entities").add_child(shot)
+	shot.launch(1)
+	for i in 30:
+		await get_tree().physics_frame
+		if not is_instance_valid(boss) or not bool(boss.get("_alive")):
+			break
+	await get_tree().physics_frame
+	await get_tree().process_frame
+
+	_expect(not is_instance_valid(boss) or not bool(boss.get("_alive")),
+		"金幣打中 Boss 會打死它")
+	_expect(main.stats.score == score_before + BossRules.SCORE,
+		"Boss 死亡訊號傳到了 Main",
+		"分數 %d -> %d" % [score_before, main.stats.score])
+	_expect(goal.monitorable,
+		"金幣打死 Boss 後旗竿碰得到（賦值沒有被物理訊號擋掉）")
 	main.queue_free()
 	await get_tree().process_frame

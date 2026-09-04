@@ -22,6 +22,10 @@ func test_every_texture_exists() -> void:
 	for i in Roster.COUNT:
 		var path := Roster.texture_path(i)
 		assert_true(ResourceLoader.exists(path), "缺少貼圖 %s" % path)
+		assert_true(ResourceLoader.exists(Roster.walk_texture_path(i)),
+			"缺少走路貼圖 %s" % Roster.walk_texture_path(i))
+		assert_true(ResourceLoader.exists(Roster.big_texture_path(i)),
+			"缺少變身貼圖 %s" % Roster.big_texture_path(i))
 
 func test_cycle_moves_forward_and_wraps() -> void:
 	assert_eq(Roster.cycle(0, 1), 1)

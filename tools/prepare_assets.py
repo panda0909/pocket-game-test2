@@ -474,7 +474,7 @@ def build_share_cover():
     img.alpha_composite(ground)
 
     # 三隻主角。原圖高 180，放大到 300 讓它們在縮圖裡也看得清。
-    characters = ["red_bull.png", "dino.png", "gecko.png"]
+    characters = ["red_bull_adventure.png", "dino_adventure.png", "gecko_adventure.png"]
     target_h = 300
     slots = [300, 600, 900]
     for name, cx in zip(characters, slots):

@@ -14,7 +14,9 @@ func _ready() -> void:
 	add_to_group(\"goal\")
 
 func set_active(active: bool) -> void:
-	monitorable = active
+	# Boss 被金幣打死時，這裡是從 CoinShot 的 body_entered 訊號一路同步呼叫進來的，
+	# 直接改 monitorable 會被 Godot 擋掉，旗竿就永遠碰不到。延後到訊號結束再改。
+	set_deferred(\"monitorable\", active)
 	modulate.a = 1.0 if active else 0.45
 "
 

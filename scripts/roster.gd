@@ -8,19 +8,29 @@ extends RefCounted
 ## 一旦某隻角色跳得比較低，同一張關卡對牠來說就可能有跳不上去的地方。要做
 ## 有數值差異的角色，得連帶把那些關卡測試改成「三組數值各驗一次」。
 ##
-## 三隻的原圖都是 180 px 高，所以 Player 的 BASE_SPRITE_SCALE 直接適用，
-## 不需要為個別角色調縮放。壁虎的原圖較寬（150 vs 131／129），視覺上會比另
-## 兩隻寬一點，尾巴會突出碰撞箱——平台遊戲的慣例是「看起來大、判定小」，
-## 對玩家有利，所以保留。
+## 所有狀態圖統一整理成 180 px 高，所以 Player 的 BASE_SPRITE_SCALE 直接適用。
+## 裝備、走路與變身圖都是獨立 sprite；碰撞箱仍然只由 Player 控制。
 
 const COUNT := 3
 const DEFAULT_INDEX := 0
 
 const _NAMES := ["紅牛", "綠恐龍", "橘壁虎"]
 const _TEXTURES := [
-	"res://assets/characters/red_bull.png",
-	"res://assets/characters/dino.png",
-	"res://assets/characters/gecko.png",
+	"res://assets/characters/red_bull_adventure.png",
+	"res://assets/characters/dino_adventure.png",
+	"res://assets/characters/gecko_adventure.png",
+]
+
+const _WALK_TEXTURES := [
+	"res://assets/characters/red_bull_walk.png",
+	"res://assets/characters/dino_walk.png",
+	"res://assets/characters/gecko_walk.png",
+]
+
+const _BIG_TEXTURES := [
+	"res://assets/characters/red_bull_big.png",
+	"res://assets/characters/dino_big.png",
+	"res://assets/characters/gecko_big.png",
 ]
 
 
@@ -38,6 +48,14 @@ static func name_of(index: int) -> String:
 
 static func texture_path(index: int) -> String:
 	return _TEXTURES[clamp_index(index)]
+
+
+static func walk_texture_path(index: int) -> String:
+	return _WALK_TEXTURES[clamp_index(index)]
+
+
+static func big_texture_path(index: int) -> String:
+	return _BIG_TEXTURES[clamp_index(index)]
 
 
 ## 往前或往後選一隻，走到頭會繞回另一端。

@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" path="res://scenes/end_menu.gd" id="1"]
 [ext_resource type="FontFile" path="res://assets/fonts/NotoSansTC-Bold.otf" id="2"]
+[ext_resource type="Texture2D" path="res://assets/share_cover.png" id="3"]
 
 [sub_resource type="LabelSettings" id="title_style"]
 font = ExtResource("2")
@@ -37,7 +38,7 @@ anchor_bottom = 0.5
 offset_left = -560.0
 offset_top = -200.0
 offset_right = 560.0
-offset_bottom = 200.0
+offset_bottom = 260.0
 theme_override_constants/separation = 26
 alignment = 1
 
@@ -45,6 +46,17 @@ alignment = 1
 text = "遊戲結束"
 horizontal_alignment = 1
 label_settings = SubResource("title_style")
+
+[node name="SharePreview" type="TextureRect" parent="Panel"]
+custom_minimum_size = Vector2(360, 189)
+texture = ExtResource("3")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="ShareCaption" type="Label" parent="Panel"]
+text = "社群分享預覽"
+horizontal_alignment = 1
+label_settings = SubResource("note_style")
 
 [node name="Score" type="Label" parent="Panel"]
 text = "分數 0　　金幣 0 枚"

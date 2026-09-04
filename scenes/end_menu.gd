@@ -25,6 +25,7 @@ var _buttons: Array[Button] = []
 
 @onready var _title: Label = $Panel/Title
 @onready var _score: Label = $Panel/Score
+@onready var _share_preview: TextureRect = $Panel/SharePreview
 @onready var _row: HBoxContainer = $Panel/Row
 @onready var _note: Label = $Panel/Note
 
@@ -54,6 +55,7 @@ func _build_buttons() -> void:
 func show_result(cleared: bool, score: int, coins: int) -> void:
 	_title.text = "通關！" if cleared else "遊戲結束"
 	_score.text = "分數 %d　　金幣 %d 枚" % [score, coins]
+	_share_preview.tooltip_text = "這張圖片就是分享到社群時使用的預覽圖"
 	_note.text = ""
 	_index = ACTIONS.find(DEFAULT_ACTION)
 	_refresh()
