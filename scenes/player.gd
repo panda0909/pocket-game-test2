@@ -130,9 +130,11 @@ func _read_input() -> Dictionary:
 		"dir": Input.get_axis("move_left", "move_right"),
 		"jump_pressed": Input.is_action_just_pressed("jump"),
 		"jump_held": Input.is_action_pressed("jump"),
-		# Shift 一鍵兩用：按住是衝刺，按下的那一幀才丟金幣（見下方 throw）。
+		# 衝刺與丟金幣是兩個獨立的 action。以前 sprint 直接讀 throw，
+		# 大牛每次起衝都會丟掉一枚金幣，而金幣是有限彈藥（Boss 要六發）——
+		# 習慣按住 Shift 跑的玩家會在抵達關底前把彈藥灑光。
 		# 衝刺不需要變大，不然小牛全程只能慢走。
-		"sprint": Input.is_action_pressed("throw"),
+		"sprint": Input.is_action_pressed("sprint"),
 	}
 
 

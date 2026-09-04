@@ -19,6 +19,7 @@ const DEATH_PAUSE := 0.9
 const HURRY_SECONDS := HUD.HURRY_SECONDS
 
 var stats := RunStats.new()
+var save := SaveData.new()
 var flow_state := Flow.TITLE
 ## 選到第幾隻主角。整局都用同一隻，死亡重生不會換人；
 ## 回到標題時保留上次的選擇當游標起點。
@@ -44,16 +45,20 @@ var _level_broken := false
 @onready var _hud: HUD = $HUD
 @onready var _select: CharacterSelect = $CharacterSelect
 @onready var _end_menu: EndMenu = $EndMenu
+@onready var _pause_menu: PauseMenu = $PauseMenu
 
 
 func _ready() -> void:
 	if not ResourceLoader.exists(_level_path) and not FileAccess.file_exists(_level_path):
 		_level_path = "res://levels/dev.txt"
+	save = SaveData.load_from_disk()
 	_connect_player()
 	_select.moved.connect(_on_select_moved)
 	_select.confirmed.connect(_on_select_confirmed)
 	_select.cancelled.connect(_on_select_cancelled)
 	_end_menu.chosen.connect(_on_end_menu_chosen)
+	_pause_menu.resumed.connect(_on_resumed)
+	_pause_menu.quit_to_title.connect(_on_quit_to_title)
 	_enter_state(Flow.TITLE)
 
 
@@ -296,6 +301,13 @@ func _physics_process(_delta: float) -> void:
 ## --- 流程 ---
 
 func _unhandled_input(event: InputEvent) -> void:
+	# 暫停優先。樹被暫停之後 Main 就收不到輸入了，繼續遊戲那一下由
+	# PauseMenu 自己處理（它的 process_mode 是 ALWAYS）。
+	if event.is_action_pressed("pause") and flow_state == Flow.PLAYING:
+		get_viewport().set_input_as_handled()
+		_pause_menu.open()
+		return
+
 	# 選角畫面要吃走左右鍵，所以它先於 jump 的判斷處理。
 	if flow_state == Flow.SELECT:
 		_select.handle_action(event)
@@ -307,6 +319,15 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if flow_state == Flow.TITLE and not _level_broken:
 		_advance("start")
+
+
+func _on_resumed() -> void:
+	# 暫停選單吃掉了那一下按鍵，但玩家放開之前不該被當成新的輸入。
+	_player.begin_control()
+
+
+func _on_quit_to_title() -> void:
+	_advance("restart") if flow_state != Flow.PLAYING else _enter_state(Flow.TITLE)
 
 
 func _on_select_moved(direction: int) -> void:
@@ -368,6 +389,10 @@ func _advance(event: String) -> void:
 
 
 func _enter_state(state: int, event := "") -> void:
+	# 任何狀態轉換都先解除暫停。暫停選單開著時若因為別的路徑
+	# 離開了遊玩狀態，樹會永遠停在 paused。
+	if _pause_menu.visible:
+		_pause_menu.close()
 	flow_state = state
 	if Flow.accepts_input(state):
 		_player.begin_control()
@@ -385,8 +410,7 @@ func _enter_state(state: int, event := "") -> void:
 					"%s 讀不起來，請看主控台的錯誤訊息" % _level_path)
 			else:
 				Audio.stop_music()
-				_hud.show_message("口袋牛牛大冒險",
-					"按空白鍵開始　　方向鍵／WASD 移動　空白鍵跳　Shift 丟金幣　↓ 進水管")
+				_hud.show_message("口袋牛牛大冒險", _title_subtitle())
 		Flow.SELECT:
 			_hud.hide_message()
 			_select.show_index(character_index)
@@ -396,14 +420,37 @@ func _enter_state(state: int, event := "") -> void:
 			if event == "died":
 				_respawn()
 		Flow.GAME_OVER:
+			Audio.stop_music()
 			_hud.hide_message()
+			_record_run(false)
 			_end_menu.show_result(false, stats.score, stats.coins)
 		Flow.CLEARED:
+			Audio.stop_music()
 			Audio.play("clear")
 			stats.finish()
 			_hud.hide_message()
+			_record_run(true)
 			_end_menu.show_result(true, stats.score, stats.coins)
 	_hud.update_stats(stats, _player.state.is_big())
+
+
+## 把這一局記進最高分紀錄。
+## 標題畫面的第二行。有紀錄就先報紀錄——刷分要有對照組才有意義。
+func _title_subtitle() -> String:
+	var controls := "空白鍵開始　方向鍵／WASD 移動　空白／↑ 跳　Shift 衝刺　J 丟金幣　↓ 進水管　ESC 暫停"
+	if save.best_score <= 0:
+		return controls
+	var record := "最高分 %d　金幣 %d 枚" % [save.best_score, save.best_coins]
+	if save.cleared:
+		record += "　已通關（最佳剩餘 %d 秒）" % save.best_time_left
+	return record + "\n" + controls
+
+
+## 把這一局記進最高分紀錄。
+func _record_run(cleared: bool) -> void:
+	if save.record_run(stats.score, stats.coins, cleared, stats.seconds_left()):
+		_end_menu.show_note("新紀錄！上一個最高分是 %d" % save.best_score)
+	save.save_to_disk()
 
 
 func _restart_run() -> void:

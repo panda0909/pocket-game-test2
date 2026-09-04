@@ -13,6 +13,8 @@ var _failed := 0
 
 
 func _ready() -> void:
+	# 有些檢查會把樹暫停。這個節點得繼續跑，不然 await 之後就再也醒不來。
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	print("整合測試開始")
 	print("環境 %s" % OS.get_name())
 	print("---")
@@ -34,7 +36,7 @@ func _ready() -> void:
 	await _check_select_arrows_cycle()
 	await _check_sprint_is_faster()
 	await _check_small_player_can_sprint()
-	await _check_tapping_shift_throws_a_coin()
+	await _check_pressing_throw_key_fires_a_coin()
 	await _check_end_menu_appears_and_navigates()
 	await _check_share_actions_degrade_outside_web()
 	await _check_pipe_round_trip_keeps_run_stats()
@@ -47,6 +49,9 @@ func _ready() -> void:
 	await _check_dead_enemy_stops_being_an_enemy()
 	await _check_share_copy_reports_failure_in_headless()
 	await _check_confirming_character_does_not_jump()
+	await _check_pause_stops_the_world()
+	await _check_pause_is_released_on_state_change()
+	await _check_finishing_a_run_records_the_score()
 
 	print("---")
 	print("通過 %d　失敗 %d" % [_passed, _failed])
@@ -331,11 +336,16 @@ func _check_sprint_is_faster() -> void:
 
 
 ## 衝刺不該要求變大。小牛如果只能慢走，整個前半段關卡會很拖。
+##
+## 這條以前和上面那條參數完全相同、只是順序對調——兩條測的都是小牛，
+## 真正該防的迴歸（有人把衝刺綁上「必須是大牛」）兩條都抓不到，
+## 而且 _measure_run 的 big 參數從來沒被傳過 true，那段是死碼。
+## 現在是真的對照：小牛衝刺與大牛衝刺應該一樣快。
 func _check_small_player_can_sprint() -> void:
 	var small_dash := await _measure_run(true, false)
-	var small_walk := await _measure_run(false, false)
-	_expect(small_dash > small_walk * 1.2, "小牛按住 Shift 也衝得起來",
-		"走路 %.0f px、衝刺 %.0f px" % [small_walk, small_dash])
+	var big_dash := await _measure_run(true, true)
+	_expect(small_dash > big_dash * 0.9, "小牛衝刺不比大牛慢",
+		"小牛 %.0f px、大牛 %.0f px" % [small_dash, big_dash])
 
 
 ## 量測 40 個物理幀內往右跑了多遠。
@@ -353,40 +363,44 @@ func _measure_run(sprint: bool, big: bool) -> float:
 	var start_x := player.global_position.x
 	Input.action_press("move_right")
 	if sprint:
-		Input.action_press("throw")
+		Input.action_press("sprint")
 	for i in 40:
 		await get_tree().physics_frame
 	Input.action_release("move_right")
 	if sprint:
-		Input.action_release("throw")
+		Input.action_release("sprint")
 	var travelled := player.global_position.x - start_x
 	main.queue_free()
 	await get_tree().process_frame
 	return travelled
 
 
-## Shift 一鍵兩用的另一半：按下的那一幀，大牛有金幣時會丟出一枚。
-## 這是我提醒過的代價（起衝會漏一枚金幣），使用者選了這個方案，
-## 所以把它釘成明確的預期行為而不是意外。
-func _check_tapping_shift_throws_a_coin() -> void:
+## 丟金幣有自己的鍵（J），按下去大牛有金幣時會丟出一枚。
+##
+## 衝刺與丟金幣以前共用 Shift，於是大牛每次起衝都會漏掉一枚金幣，
+## 而金幣是有限彈藥（Boss 要六發）。現在兩者分家，這條檢查證明
+## 丟金幣那條路仍然接得起來。
+func _check_pressing_throw_key_fires_a_coin() -> void:
 	var main := await _make_main()
 	main.begin_game()
+	await get_tree().physics_frame
 	var player: Player = main.get_node("Player")
 	player.grow()
-	for i in 5:
+	for i in 6:
 		main.stats.add_coin()
 	var before: int = main.stats.coins
+	await _tap(KEY_J)
+	await get_tree().physics_frame
+	_expect(main.stats.coins == before - 1, "按 J 丟出一枚金幣",
+		"%d -> %d" % [before, main.stats.coins])
 
-	await _tap_action("throw")
-	_expect(main.stats.coins == before - 1, "輕點 Shift 會丟出一枚金幣",
-		"金幣 %d -> %d" % [before, main.stats.coins])
-
-	# 沒金幣時 Shift 應該是純衝刺，不會扣到負的
-	while main.stats.spend_coin():
-		pass
-	await _tap_action("throw")
-	_expect(main.stats.coins == 0, "彈藥空了按 Shift 不會扣成負數",
-		"金幣=%d" % main.stats.coins)
+	# 彈藥空了不該扣成負數
+	while main.stats.coins > 0:
+		main.stats.spend_coin()
+	await _tap(KEY_J)
+	await get_tree().physics_frame
+	_expect(main.stats.coins == 0, "彈藥空了按 J 不會扣成負數",
+		"coins=%d" % main.stats.coins)
 	main.queue_free()
 	await get_tree().process_frame
 
@@ -892,5 +906,58 @@ func _check_confirming_character_does_not_jump() -> void:
 	var player: Player = main.get_node("Player")
 	_expect(player.velocity.y > -100.0,
 		"確認選角不會被當成跳躍", "開場的 velocity.y=%.1f" % player.velocity.y)
+	main.queue_free()
+	await get_tree().process_frame
+
+
+## ESC 要真的暫停：樹停住、選單出現、再按一次回到遊戲。
+func _check_pause_stops_the_world() -> void:
+	var main := await _make_main()
+	main.begin_game()
+	await get_tree().physics_frame
+	var menu: PauseMenu = main.get_node("PauseMenu")
+	var seconds_before: int = main.stats.seconds_left()
+
+	await _tap(KEY_ESCAPE)
+	_expect(menu.visible, "按 ESC 叫出暫停選單")
+	_expect(get_tree().paused, "暫停選單開著時整棵樹是停的")
+
+	for i in 20:
+		await get_tree().process_frame
+	_expect(main.stats.seconds_left() == seconds_before,
+		"暫停期間計時不會繼續倒數",
+		"%d -> %d" % [seconds_before, main.stats.seconds_left()])
+
+	await _tap(KEY_ESCAPE)
+	_expect(not menu.visible, "再按一次 ESC 收起暫停選單")
+	_expect(not get_tree().paused, "繼續遊戲之後樹恢復運作")
+	main.queue_free()
+	await get_tree().process_frame
+
+
+## 暫停選單開著時離開遊玩狀態，不能把樹永遠留在暫停。
+func _check_pause_is_released_on_state_change() -> void:
+	var main := await _make_main()
+	main.begin_game()
+	await get_tree().physics_frame
+	main.get_node("PauseMenu").open()
+	_expect(get_tree().paused, "先把樹暫停起來")
+	main.call("_advance", "goal")
+	await get_tree().process_frame
+	_expect(not get_tree().paused, "通關之後樹不會卡在暫停")
+	main.queue_free()
+	await get_tree().process_frame
+
+
+## 一局結束要把成績寫進最高分紀錄。
+func _check_finishing_a_run_records_the_score() -> void:
+	var main := await _make_main()
+	main.begin_game()
+	await get_tree().physics_frame
+	main.stats.add_score(7777)
+	main.call("_advance", "goal")
+	await get_tree().process_frame
+	_expect(main.save.best_score >= 7777,
+		"通關的分數進了最高分紀錄", "best_score=%d" % main.save.best_score)
 	main.queue_free()
 	await get_tree().process_frame
