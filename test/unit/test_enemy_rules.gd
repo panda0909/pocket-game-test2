@@ -69,3 +69,38 @@ func test_small_tolerance_below_the_top_still_counts() -> void:
 func test_score_differs_by_kind() -> void:
 	assert_gt(EnemyRules.score(EnemyRules.KIND_ARROW),
 		EnemyRules.score(EnemyRules.KIND_BEAR))
+
+
+# --- 重力上限 ---
+# 敵人原本沒有終端速度也沒有掉出關卡的清除，離開地板就永遠往下掉，
+# velocity.y 無上限累積，節點永不釋放。
+
+func test_gravity_is_capped_at_terminal_speed() -> void:
+	var vy := 0.0
+	for i in 600:
+		vy = EnemyRules.apply_gravity(vy, 1.0 / 60.0)
+	assert_almost_eq(vy, EnemyRules.TERMINAL_FALL, 0.01)
+
+func test_gravity_accelerates_before_the_cap() -> void:
+	var first := EnemyRules.apply_gravity(0.0, 1.0 / 60.0)
+	assert_gt(first, 0.0)
+	assert_lt(first, EnemyRules.TERMINAL_FALL)
+
+
+# --- 俯衝方向 ---
+# 原本是 to_player.normalized()：玩家剛好站在瞄準點上時是零向量，
+# Godot 的 normalized() 回 Vector2.ZERO 而不報錯，箭頭就停在半空中抖動。
+
+func test_dive_velocity_points_at_the_target() -> void:
+	var v := EnemyRules.dive_velocity(Vector2.ZERO, Vector2(100, 0))
+	assert_almost_eq(v.x, EnemyRules.ARROW_DIVE_SPEED, 0.01)
+	assert_almost_eq(v.y, 0.0, 0.01)
+
+func test_dive_velocity_is_never_zero_when_on_top_of_target() -> void:
+	var v := EnemyRules.dive_velocity(Vector2(500, 300), Vector2(500, 300))
+	assert_almost_eq(v.length(), EnemyRules.ARROW_DIVE_SPEED, 0.01)
+
+func test_dive_velocity_keeps_constant_speed() -> void:
+	for target in [Vector2(3, 4), Vector2(-40, 900), Vector2(0.0001, 0)]:
+		var v := EnemyRules.dive_velocity(Vector2.ZERO, target)
+		assert_almost_eq(v.length(), EnemyRules.ARROW_DIVE_SPEED, 0.01)

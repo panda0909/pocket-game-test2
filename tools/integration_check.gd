@@ -43,6 +43,10 @@ func _ready() -> void:
 	await _check_death_costs_one_life_and_respawns()
 	await _check_death_in_room_still_costs_a_life()
 	await _check_broken_level_does_not_start_playing()
+	await _check_coin_shot_stops_at_blocks()
+	await _check_dead_enemy_stops_being_an_enemy()
+	await _check_share_copy_reports_failure_in_headless()
+	await _check_confirming_character_does_not_jump()
 
 	print("---")
 	print("通過 %d　失敗 %d" % [_passed, _failed])
@@ -797,5 +801,96 @@ func _check_broken_level_does_not_start_playing() -> void:
 	_expect(not loaded, "壞掉的關卡回報載入失敗")
 	_expect(main.flow_state != Flow.PLAYING,
 		"關卡載不起來就不會進入遊玩狀態", "flow_state=%d" % main.flow_state)
+	main.queue_free()
+	await get_tree().process_frame
+
+
+## 丟出去的金幣撞到問號磚要消失，不能穿過去。
+##
+## 舊的判斷只認 boss 群組、enemy 群組與 TileMapLayer 三種。問號磚、水管、
+## 移動平台都是 collision_layer 1、會觸發 body_entered，卻三個分支都不成立——
+## 金幣直接穿牆飛走。
+func _check_coin_shot_stops_at_blocks() -> void:
+	var main := await _make_main()
+	main.begin_game()
+	await get_tree().physics_frame
+	var block: Node2D = _first_in_group(main, "block")
+	if block == null:
+		_fail("主關卡有問號磚")
+		main.queue_free()
+		await get_tree().process_frame
+		return
+	_ok("主關卡有問號磚")
+
+	var shot: Node2D = load("res://scenes/coin_shot.tscn").instantiate()
+	shot.global_position = block.global_position + Vector2(-100, 0)
+	main.get_node("Entities").add_child(shot)
+	shot.launch(1)
+	var gone := false
+	for i in 45:
+		await get_tree().physics_frame
+		if not is_instance_valid(shot) or shot.is_queued_for_deletion():
+			gone = true
+			break
+	_expect(gone, "金幣撞到問號磚就消失，不會穿過去")
+	main.queue_free()
+	await get_tree().process_frame
+
+
+## 打死的敵人要立刻退出 enemy 群組。
+##
+## 玩家的接觸判定是每幀輪詢 enemy 群組的。屍體會停留 0.22 秒做淡出動畫，
+## 這段期間如果還在群組裡，跑過去撞上它照樣會被扣血。
+func _check_dead_enemy_stops_being_an_enemy() -> void:
+	var main := await _make_main()
+	main.begin_game()
+	await get_tree().physics_frame
+	var enemy: Node2D = _first_in_group(main, "enemy")
+	if enemy == null:
+		_fail("主關卡有敵人")
+		main.queue_free()
+		await get_tree().process_frame
+		return
+	_ok("主關卡有敵人")
+	enemy.die()
+	await get_tree().physics_frame
+	_expect(not enemy.is_in_group("enemy"),
+		"死掉的敵人立刻退出 enemy 群組，屍體不會再傷人")
+	main.queue_free()
+	await get_tree().process_frame
+
+
+## headless 下複製成績要回報失敗，而且提示文字要說明失敗。
+##
+## 舊的斷言只檢查「提示文字非空」，而每個分支不論成敗都會 show_note——
+## 那條斷言在任何情況下都會通過，連「headless 卻顯示已複製」都抓不到。
+func _check_share_copy_reports_failure_in_headless() -> void:
+	var main := await _make_main()
+	main.begin_game()
+	main.call("_advance", "goal")
+	await get_tree().process_frame
+	var menu: EndMenu = main.get_node("EndMenu")
+	main.call("_on_end_menu_chosen", "copy")
+	await get_tree().process_frame
+	var note := menu.current_note()
+	_expect(note.contains("失敗") or note.contains("無法"),
+		"headless 下複製成績說的是失敗，不是「已複製」", "提示是「%s」" % note)
+	main.queue_free()
+	await get_tree().process_frame
+
+
+## 在選角畫面按空白鍵確認，主角不該在開場那一幀無故跳一下。
+##
+## _unhandled_input 在輸入派送階段執行，早於同一幀的物理步；確認之後
+## control_enabled 立刻變 true，緊接著 Player 的 is_action_just_pressed("jump")
+## 比對到同一個物理幀編號，於是回傳 true。
+func _check_confirming_character_does_not_jump() -> void:
+	var main := await _make_main()
+	await _tap(KEY_SPACE)
+	await _tap(KEY_SPACE)
+	_expect(main.flow_state == Flow.PLAYING, "已經進入遊玩狀態")
+	var player: Player = main.get_node("Player")
+	_expect(player.velocity.y > -100.0,
+		"確認選角不會被當成跳躍", "開場的 velocity.y=%.1f" % player.velocity.y)
 	main.queue_free()
 	await get_tree().process_frame

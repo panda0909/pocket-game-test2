@@ -12,6 +12,7 @@ extends RefCounted
 
 const TILE := 64
 const SOURCE_ID := 0
+const TILES_TEXTURE := "res://assets/tiles.png"
 
 const COIN_SCENE := preload("res://scenes/coin.tscn")
 const GOAL_SCENE := preload("res://scenes/goal_flag.tscn")
@@ -48,13 +49,21 @@ static func build_tileset() -> TileSet:
 	tile_set.set_physics_layer_collision_mask(0, 0)
 
 	var source := TileSetAtlasSource.new()
-	source.texture = load("res://assets/tiles.png")
+	# 貼圖載不到就用佔位圖降級，不要讓整個 _ready() 在下一行對 null 呼叫
+	# get_width() 而崩掉——那會停在全黑畫面，連 HUD 都建不起來。
+	var atlas := load(TILES_TEXTURE) as Texture2D
+	if atlas == null:
+		push_error("圖磚貼圖載入失敗：%s" % TILES_TEXTURE)
+		var placeholder := PlaceholderTexture2D.new()
+		placeholder.size = Vector2(TILE * 8, TILE)
+		atlas = placeholder
+	source.texture = atlas
 	source.texture_region_size = Vector2i(TILE, TILE)
 	# 先掛進 TileSet 再建圖磚。圖磚的實體層是從所屬 TileSet 繼承來的，
 	# 順序反過來的話 set_collision_polygon_points 會說 layer 0 越界。
 	tile_set.add_source(source, SOURCE_ID)
 
-	var columns := int(source.texture.get_width() / TILE)
+	var columns := maxi(1, int(source.texture.get_width() / TILE))
 	for column in columns:
 		var coords := Vector2i(column, 0)
 		source.create_tile(coords)
@@ -105,8 +114,10 @@ static func build(map: LevelMap, tile_layer: TileMapLayer,
 				entity_root.add_child(_make_hazard(cell))
 				built += 1
 
+	# 掉到關卡下緣再一格就收掉，敵人才不會無限下墜而永不釋放。
+	var despawn_y := map.pixel_size(TILE).y + TILE
 	for entity in map.entities:
-		var node := _make_entity(entity)
+		var node := _make_entity(entity, despawn_y)
 		if node == null:
 			continue
 		entity_root.add_child(node)
@@ -137,7 +148,7 @@ static func _make_hazard(cell: Vector2i) -> Area2D:
 	return area
 
 
-static func _make_entity(entity: Dictionary) -> Node2D:
+static func _make_entity(entity: Dictionary, despawn_y := INF) -> Node2D:
 	var type: String = entity["type"]
 	var cell: Vector2i = entity["cell"]
 
@@ -152,7 +163,7 @@ static func _make_entity(entity: Dictionary) -> Node2D:
 			return goal
 		"bear", "spikeball", "arrow":
 			var enemy := ENEMY_SCENE.instantiate()
-			enemy.setup(EnemyRules.kind_from_type(type))
+			enemy.setup(EnemyRules.kind_from_type(type), despawn_y)
 			# 刺球與箭頭懸空，站在格子中央；小熊站在格子底邊。
 			enemy.position = cell_bottom(cell) if type == "bear" \
 				else cell_center(cell)

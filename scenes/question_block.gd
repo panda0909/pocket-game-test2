@@ -67,7 +67,9 @@ func _bump() -> void:
 
 
 func _break() -> void:
-	collision_layer = 0
+	# 只能延後改。_break 是在玩家的碰撞回呼裡被同步呼叫的，直接賦值會被
+	# 「Function blocked during in/out signal」擋掉——底下那行直接賦值是
+	# 舊寫法的殘留，正是會出問題的那一行。
 	set_deferred("collision_layer", 0)
 	var tween := create_tween().set_parallel()
 	tween.tween_property(_sprite, "scale", Vector2(1.4, 1.4), 0.18)

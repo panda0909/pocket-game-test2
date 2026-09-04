@@ -8,7 +8,6 @@ extends CharacterBody2D
 
 signal died(kind: int)
 
-const GRAVITY := 1400.0
 const DEATH_TIME := 0.22
 
 ## 各種敵人的碰撞箱與半高。半高是踩踏判定要用的，所以和貼圖尺寸綁在一起。
@@ -26,6 +25,7 @@ var _alive := true
 var _diving := false
 var _home_y := 0.0
 var _float_phase := 0.0
+var _despawn_y := INF
 
 @onready var _sprite: Sprite2D = $Sprite
 @onready var _shape: CollisionShape2D = $Shape
@@ -35,8 +35,13 @@ var _float_phase := 0.0
 
 ## 建構器在 add_child 之前呼叫。@onready 還沒跑，所以只記參數，
 ## 真正套用留給 _ready。
-func setup(enemy_kind: int) -> void:
+func setup(enemy_kind: int, despawn_y := INF) -> void:
 	kind = enemy_kind
+	_despawn_y = despawn_y
+
+
+func is_alive() -> bool:
+	return _alive
 
 
 func _ready() -> void:
@@ -58,6 +63,12 @@ func _physics_process(delta: float) -> void:
 	if not _alive:
 		return
 
+	# 掉出關卡下緣就收掉。少了這個，被打碎磚台的敵人會永遠下墜，
+	# 節點不釋放、_physics_process 也一直在跑。
+	if global_position.y > _despawn_y:
+		queue_free()
+		return
+
 	if kind == EnemyRules.KIND_ARROW:
 		_process_arrow(delta)
 	else:
@@ -69,7 +80,7 @@ func _physics_process(delta: float) -> void:
 ## 巡邏：前方撞牆或前方沒地板就回頭。這讓小熊不會從平台邊緣走下去，
 ## 玩家因此可以預測牠的路線，而不是每次都要重新觀察。
 func _process_patrol(delta: float) -> void:
-	velocity.y += GRAVITY * delta
+	velocity.y = EnemyRules.apply_gravity(velocity.y, delta)
 	var speed := EnemyRules.patrol_speed(kind)
 
 	if is_on_floor():
@@ -96,12 +107,12 @@ func _process_arrow(delta: float) -> void:
 		if distance < EnemyRules.ARROW_TRIGGER_RANGE:
 			_diving = true
 		else:
-			_float_phase += delta * 2.4
-			velocity = Vector2(0, sin(_float_phase) * 24.0)
+			_float_phase += delta * EnemyRules.ARROW_FLOAT_SPEED
+			velocity = EnemyRules.float_velocity(_float_phase)
 			return
 
-	var to_player := (player.global_position - Vector2(0, 40)) - global_position
-	velocity = to_player.normalized() * EnemyRules.ARROW_DIVE_SPEED
+	velocity = EnemyRules.dive_velocity(global_position,
+		player.global_position - EnemyRules.ARROW_AIM_OFFSET)
 
 
 func _find_player() -> Node2D:
@@ -121,8 +132,13 @@ func die() -> void:
 	if not _alive:
 		return
 	_alive = false
-	collision_layer = 0
-	collision_mask = 0
+	# 退出群組，玩家的每幀輪詢才不會再找上這具屍體。光把碰撞層歸零不夠：
+	# die() 常常是在 body_entered 訊號回呼裡被同步呼叫的，而 Godot 在物理
+	# in/out 訊號期間會擋掉對碰撞層的直接賦值——屍體看起來死了，撞上去
+	# 卻還是會扣血。
+	remove_from_group("enemy")
+	set_deferred("collision_layer", 0)
+	set_deferred("collision_mask", 0)
 	velocity = Vector2.ZERO
 	died.emit(kind)
 

@@ -37,16 +37,24 @@ static func open_url(url: String) -> bool:
   return 'navigate';
 })(%s);
 """ % JSON.stringify(url)
-	JavaScriptBridge.eval(script, true)
-	return true
+	var result: Variant = JavaScriptBridge.eval(script, true)
+	# JS 寫了回傳值就要接住。以前直接 return true，於是 eval 拋例外時
+	# 也照樣顯示「正在開啟 Facebook 分享」。
+	return result == "popup" or result == "navigate"
 
 
 ## 複製到剪貼簿。DisplayServer 的實作在某些瀏覽器上會靜靜失敗，
 ## 所以再用 navigator.clipboard 補一次。
 static func copy_to_clipboard(text: String) -> bool:
-	DisplayServer.clipboard_set(text)
 	if not is_available():
-		return false
+		# 桌面與編輯器版本 DisplayServer 直接就能複製，成敗問它本人。
+		# 以前這裡先複製成功、再因為「不是網頁版」回 false，於是玩家
+		# 明明複製好了卻看到「複製失敗，請手動選取」。
+		if not DisplayServer.has_feature(DisplayServer.FEATURE_CLIPBOARD):
+			return false
+		DisplayServer.clipboard_set(text)
+		return DisplayServer.clipboard_get() == text
+	DisplayServer.clipboard_set(text)
 	var script := """
 (function(t){
   try {
@@ -68,5 +76,4 @@ static func copy_to_clipboard(text: String) -> bool:
   } catch (e) { return false; }
 })(%s);
 """ % JSON.stringify(text)
-	JavaScriptBridge.eval(script, true)
-	return true
+	return JavaScriptBridge.eval(script, true) == true

@@ -44,16 +44,24 @@ var character_index := Roster.DEFAULT_INDEX
 var _timers := PlayerPhysics.new_timers()
 var _facing := 1
 var _cycle := 0.0
+## 無敵閃爍的相位。與 _cycle 分開，因為 _cycle 只在地面上走。
+var _blink_phase := 0.0
 var _impulse_scale := Vector2.ONE
 var _was_on_floor := true
 ## 上一幀腳底的位置。踩踏判定要用它，用當幀位置會被幀間位移跳過去。
 var _previous_feet_y := 0.0
 var _standing_pipe := ""
+## 剛拿回控制權的那一幀先忽略輸入。選角的確認鍵是在同一幀被 parse 的，
+## 緊接著的物理步裡 Input.is_action_just_pressed("jump") 仍然為真——
+## 玩家一開場就會無故跳一下。
+var _input_grace_frames := 0
 var _active_texture_path := ""
 
 @onready var _sprite: Sprite2D = $Sprite
 @onready var _body_shape: CollisionShape2D = $BodyShape
 @onready var _camera: Camera2D = $Camera
+@onready var _touch_box: Area2D = $TouchBox
+@onready var _touch_shape: CollisionShape2D = $TouchBox/TouchShape
 
 
 ## 換主角貼圖。碰撞箱與物理參數三隻共用，所以這裡只動 texture——
@@ -64,10 +72,20 @@ func set_character(index: int) -> void:
 		_refresh_sprite_texture(false)
 
 
+## 交還控制權。一律走這裡，不要直接寫 control_enabled = true。
+func begin_control() -> void:
+	control_enabled = true
+	_input_grace_frames = 1
+
+
+func accepts_input() -> bool:
+	return control_enabled and _input_grace_frames <= 0
+
+
 func _ready() -> void:
 	add_to_group("player")
 	set_character(character_index)
-	$TouchBox.area_entered.connect(_on_area_entered)
+	_touch_box.area_entered.connect(_on_area_entered)
 	_apply_size()
 
 
@@ -93,15 +111,18 @@ func _physics_process(delta: float) -> void:
 	state.advance(delta)
 	_update_visual(delta)
 
-	if control_enabled and Input.is_action_just_pressed("throw") and state.can_throw():
+	if accepts_input() and Input.is_action_just_pressed("throw") and state.can_throw():
 		throw_requested.emit(_facing, global_position + Vector2(_facing * 34, -70))
 
-	if control_enabled and Input.is_action_just_pressed("duck") and not _standing_pipe.is_empty():
+	if accepts_input() and Input.is_action_just_pressed("duck") \
+			and not _standing_pipe.is_empty():
 		pipe_entered.emit(_standing_pipe)
+
+	_input_grace_frames = maxi(0, _input_grace_frames - 1)
 
 
 func _read_input() -> Dictionary:
-	if not control_enabled:
+	if not accepts_input():
 		return {"dir": 0.0, "jump_pressed": false, "jump_held": false, "sprint": false}
 	return {
 		"dir": Input.get_axis("move_left", "move_right"),
@@ -199,8 +220,8 @@ func _apply_size() -> void:
 	# 腳底上方 8 px，於是要等玩家陷進敵人體內才開始偵測到重疊——踩踏的
 	# 判定窗因此被壓到只剩幾個像素。
 	var touch := Vector2(size.x * 0.85, size.y + TOUCH_FOOT_MARGIN * 2.0)
-	($TouchBox/TouchShape.shape as RectangleShape2D).size = touch
-	$TouchBox/TouchShape.position.y = -size.y * 0.5 + TOUCH_FOOT_MARGIN
+	(_touch_shape.shape as RectangleShape2D).size = touch
+	_touch_shape.position.y = -size.y * 0.5 + TOUCH_FOOT_MARGIN
 
 
 func _punch_scale(target: Vector2, duration: float) -> void:
@@ -219,6 +240,11 @@ func _update_visual(delta: float) -> void:
 	var bob := 0.0
 	var walk_frame := 0
 	var walking := false
+
+	# _cycle 每幀都要走。以前只在站在地面上時才遞增，於是空中受傷後
+	# 無敵閃爍會凍結在單一透明度，玩家看不出自己還在無敵中，
+	# 白白浪費那 1.2 秒的容錯。
+	_blink_phase += delta
 
 	if is_on_floor() and speed_ratio > 0.05:
 		walking = true
@@ -249,7 +275,8 @@ func _update_visual(delta: float) -> void:
 	if absf(velocity.x) > PlayerPhysics.MAX_RUN_SPEED + 10.0:
 		lean = SPRINT_LEAN * _facing
 	_sprite.rotation = move_toward(_sprite.rotation, lean, LEAN_SPEED * delta)
-	_sprite.modulate.a = 0.35 if state.is_invincible() and int(_cycle * 24.0) % 2 == 0 else 1.0
+	_sprite.modulate.a = 0.35 if state.is_invincible() \
+		and int(_blink_phase * 24.0) % 2 == 0 else 1.0
 
 	_camera.offset.x = move_toward(_camera.offset.x, _facing * CAMERA_LOOKAHEAD,
 		240.0 * delta)
@@ -286,8 +313,11 @@ func _resolve_ceiling_hits() -> void:
 func _resolve_enemy_contacts() -> void:
 	if state.is_invincible():
 		return
-	for body in $TouchBox.get_overlapping_bodies():
+	for body in _touch_box.get_overlapping_bodies():
 		if not body.is_in_group("enemy"):
+			continue
+		# 屍體在 0.22 秒的淡出期間還在場上，退群組是延後生效的，多擋一道。
+		if body.has_method("is_alive") and not body.is_alive():
 			continue
 		# 原點在腳底，所以頭頂 = 原點往上兩個半高
 		var half: float = body.half_height

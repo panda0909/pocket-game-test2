@@ -359,7 +359,10 @@ func _advance(event: String) -> void:
 
 func _enter_state(state: int, event := "") -> void:
 	flow_state = state
-	_player.control_enabled = Flow.accepts_input(state)
+	if Flow.accepts_input(state):
+		_player.begin_control()
+	else:
+		_player.control_enabled = false
 	_select.visible = state == Flow.SELECT
 	_end_menu.visible = state == Flow.GAME_OVER or state == Flow.CLEARED
 	_hud.set_stats_visible(state != Flow.TITLE and state != Flow.SELECT)
