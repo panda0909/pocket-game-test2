@@ -1,0 +1,19 @@
+# 行尾一律 LF。跨平台協作時 .gd 與 .tscn 的行尾不統一會產生整檔 diff。
+*.gd    text eol=lf
+*.tscn  text eol=lf
+*.tres  text eol=lf
+*.cfg   text eol=lf
+*.json  text eol=lf
+*.sh    text eol=lf
+*.py    text eol=lf
+*.md    text eol=lf
+*.txt   text eol=lf
+
+# 二進位檔案不要做行尾轉換，也不要嘗試文字 diff。
+*.png   binary
+*.otf   binary
+*.ttf   binary
+*.wav   binary
+*.ogg   binary
+*.pck   binary
+*.wasm  binary

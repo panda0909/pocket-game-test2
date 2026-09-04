@@ -22,13 +22,13 @@ const BUTTONS := [
 	{"action": "jump", "at": Vector2(1170, 580), "r": 68.0, "label": "跳"},
 	{"action": "throw", "at": Vector2(1020, 636), "r": 50.0, "label": "丟"},
 	{"action": "sprint", "at": Vector2(1030, 490), "r": 50.0, "label": "衝"},
-	{"action": "pause", "at": Vector2(1216, 60), "r": 38.0, "label": "❚❚"},
+	{"action": "pause", "at": Vector2(1216, 60), "r": 38.0, "label": "停"},
 ]
 
 const FILL := Color(1, 1, 1, 0.18)
 const EDGE := Color(1, 1, 1, 0.42)
 const LABEL_COLOR := Color(1, 1, 1, 0.72)
-const FONT_PATH := "res://assets/fonts/NotoSansTC-Bold.otf"
+const FONT_PATH := "res://assets/fonts/NotoSansTC-Bold.subset.otf"
 
 
 func _ready() -> void:

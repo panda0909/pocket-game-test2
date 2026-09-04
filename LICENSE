@@ -1,0 +1,37 @@
+MIT License
+
+Copyright (c) 2025 口袋牛牛大冒險 contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+本授權涵蓋本專案的程式碼與程式化產生的美術／音訊素材。
+
+第三方素材另有授權：
+
+  assets/fonts/NotoSansTC-Bold.otf
+      Noto Sans TC，SIL Open Font License 1.1
+      授權全文見 assets/fonts/OFL.txt
+
+  addons/gut/
+      Godot Unit Test，MIT License，見該目錄內的授權檔
+
+「口袋」品牌吉祥物造型為品牌方素材，本專案在取得授權的範圍內使用；
+若要在其他專案重用這些圖，請另行向品牌方確認。

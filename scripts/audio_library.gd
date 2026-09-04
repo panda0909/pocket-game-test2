@@ -10,27 +10,50 @@ extends RefCounted
 ## 「素材可重現、來源留在版本庫裡」的做法。
 
 const DIR := "res://assets/audio/"
+const MUSIC := preload("res://assets/audio/bgm.wav")
 const MUSIC_PATH := DIR + "bgm.wav"
 
 ## 靜音的分貝值。不能用 linear_to_db(0) 的負無限大——那會讓 AudioServer
 ## 收到 -inf，某些平台上會變成 NaN 而整條匯流排靜默壞掉。
 const SILENT_DB := -60.0
 
-const _SOUNDS := [
-	"boss_down", "boss_hit", "brick_break", "bump", "checkpoint", "clear",
-	"coin", "death", "hurry", "hurt", "jump", "menu_confirm", "menu_move",
-	"one_up", "pipe", "powerup", "stomp", "throw",
-]
+const _SOUNDS := {
+	"boss_down": preload("res://assets/audio/boss_down.wav"),
+	"boss_hit": preload("res://assets/audio/boss_hit.wav"),
+	"brick_break": preload("res://assets/audio/brick_break.wav"),
+	"bump": preload("res://assets/audio/bump.wav"),
+	"checkpoint": preload("res://assets/audio/checkpoint.wav"),
+	"clear": preload("res://assets/audio/clear.wav"),
+	"coin": preload("res://assets/audio/coin.wav"),
+	"death": preload("res://assets/audio/death.wav"),
+	"hurry": preload("res://assets/audio/hurry.wav"),
+	"hurt": preload("res://assets/audio/hurt.wav"),
+	"jump": preload("res://assets/audio/jump.wav"),
+	"menu_confirm": preload("res://assets/audio/menu_confirm.wav"),
+	"menu_move": preload("res://assets/audio/menu_move.wav"),
+	"one_up": preload("res://assets/audio/one_up.wav"),
+	"pipe": preload("res://assets/audio/pipe.wav"),
+	"powerup": preload("res://assets/audio/powerup.wav"),
+	"stomp": preload("res://assets/audio/stomp.wav"),
+	"throw": preload("res://assets/audio/throw.wav"),
+}
 
 
 static func sound_names() -> Array:
-	return _SOUNDS.duplicate()
+	return _SOUNDS.keys()
+
+
+## 音效資源本身。用 preload 而不是執行期 load 是必要的，不是偏好：
+## export_presets.cfg 的 export_filter 是 "resources"，只匯出 main.tscn
+## 的相依樹，其餘全靠 include_filter 手動列白名單。執行期 load 的檔案
+## 沒有任何靜態參考，漏列就是「線上版沒聲音、本機正常」。
+static func sound(name: String) -> AudioStream:
+	return _SOUNDS.get(name)
 
 
 static func sound_path(name: String) -> String:
-	if not _SOUNDS.has(name):
-		return ""
-	return DIR + name + ".wav"
+	var stream: AudioStream = _SOUNDS.get(name)
+	return "" if stream == null else stream.resource_path
 
 
 static func clamp_volume(linear: float) -> float:

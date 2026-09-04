@@ -17,7 +17,7 @@ const IDLE_TINT := Color(0.62, 0.67, 0.76)
 
 ## 程式建立的 Button 用的是 Godot 內建字型，那套沒有中文字形，
 ## 選單文字會變成一排方塊。Label 有 label_settings 指定字型，Button 得自己覆寫。
-const BUTTON_FONT := "res://assets/fonts/NotoSansTC-Bold.otf"
+const BUTTON_FONT := "res://assets/fonts/NotoSansTC-Bold.subset.otf"
 const BUTTON_FONT_SIZE := 22
 
 var _index := ACTIONS.find(DEFAULT_ACTION)

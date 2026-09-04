@@ -8,8 +8,8 @@
 # 匯出產物（index.wasm 將近 40 MB）不該混進原始碼的歷史裡。gh-pages 的
 # 歷史也刻意每次重建成單一 commit，避免每發佈一次就多存一份 40 MB。
 #
-# 為什麼不用 GitHub Actions 自動建置：那需要在 CI 裡裝 Godot 與匯出範本，
-# 為了一個單人專案不值得。這支腳本在本機跑，效果一樣。
+# 為什麼不用 GitHub Actions 自動建置：那需要在 CI 裡裝 Godot 與匯出範本。
+# 測試本身已經接上 CI（.github/workflows/verify.yml），匯出留在本機。
 #
 # 前置條件：
 #   - 已安裝 Godot 4.7.2 的網頁匯出範本
@@ -20,21 +20,54 @@
 
 set -euo pipefail
 
-GODOT="${GODOT:-/Users/hongming/Downloads/Godot.app/Contents/MacOS/Godot}"
 cd "$(dirname "$0")/.."
+ROOT=$(pwd)
+# shellcheck source=tools/godot_env.sh
+. tools/godot_env.sh
 
 REMOTE=$(git remote get-url origin)
+SITE=$(echo "$REMOTE" | sed -E 's#.*github.com[:/]([^/]+)/([^/.]+)(\.git)?#https://\1.github.io/\2#')
+SOURCE_SHA=$(git rev-parse --short HEAD)
 WEB_DIR="build/web"
 PAGES_DIR="build/pages-repo"
 
+# 發佈前一定要跑測試。以前這支腳本從頭到尾沒有呼叫過 run_tests.sh 或
+# verify_game.sh——15 支單元測試與整合測試在發佈路徑上一次都沒被觸發，
+# 唯一的品質門檻是「index.wasm 這個檔案存在」。
+if [ "${SKIP_VERIFY:-0}" != "1" ]; then
+	echo "== 發佈前驗證 =="
+	tools/verify_game.sh
+	echo
+fi
+
+# 工作區有未提交的變更就拒絕發佈：線上跑的東西必須對得回一個 commit。
+if ! git diff --quiet || ! git diff --cached --quiet; then
+	echo "工作區還有未提交的變更，先提交再發佈"
+	echo "（真的要發佈目前狀態的話，設 ALLOW_DIRTY=1）"
+	[ "${ALLOW_DIRTY:-0}" = "1" ] || exit 1
+fi
+
 echo "== 匯出網頁版 =="
+# 一定要先清空。Godot 匯出遇到資源錯誤時常常仍回傳 0，set -e 擋不住；
+# 目錄不清空的話，殘留的舊 pck 或舊 wasm 會被當成新產物推上線，
+# 而腳本完全不會察覺。
+rm -rf "$WEB_DIR"
 mkdir -p "$WEB_DIR"
+# 全新 clone 沒有 build/，補一個 .gdignore 免得 Godot 把匯出產物
+# 當成專案資源掃進來。
+touch build/.gdignore
 "$GODOT" --headless --path . --export-release "Web" "$WEB_DIR/index.html"
 
-if [ ! -f "$WEB_DIR/index.wasm" ]; then
-	echo "匯出失敗：找不到 $WEB_DIR/index.wasm"
-	exit 1
-fi
+# index.wasm 是匯出範本的複製品，幾乎一定會產生；真正裝著遊戲內容的是
+# index.pck。以前只檢查 wasm，pck 沒產生或殘缺一樣會被推上線。
+for required in index.html index.js index.wasm index.pck; do
+	if [ ! -s "$WEB_DIR/$required" ]; then
+		echo "匯出失敗：$WEB_DIR/$required 不存在或是空的"
+		exit 1
+	fi
+done
+echo "產物大小："
+du -h "$WEB_DIR"/index.{wasm,pck,js} | sed 's/^/  /'
 
 echo
 echo "== 準備 gh-pages 內容 =="
@@ -48,20 +81,38 @@ touch "$PAGES_DIR/.nojekyll"
 # 指向 <站台>/share_cover.png——Facebook 的爬蟲抓不到就沒有預覽圖。
 cp assets/share_cover.png "$PAGES_DIR/share_cover.png"
 
+# .import 是 Godot 的內部匯入中繼資料，對網站毫無用處，還會洩漏
+# .godot/imported/ 的路徑結構。
+find "$PAGES_DIR" -name '*.import' -delete
+
+# OG 標籤在 export_presets.cfg 裡是寫死的絕對網址。任何人 fork 之後發佈，
+# 社群分享卡片仍會指向原作者的站台——圖抓不到、連結導錯人。
+# 這裡依實際的 remote 改寫。
+if [ -f "$PAGES_DIR/index.html" ]; then
+	sed -i '' -E "s#https://[a-zA-Z0-9_-]+\.github\.io/[a-zA-Z0-9_.-]+#$SITE#g" \
+		"$PAGES_DIR/index.html" 2>/dev/null || \
+	sed -i -E "s#https://[a-zA-Z0-9_-]+\.github\.io/[a-zA-Z0-9_.-]+#$SITE#g" \
+		"$PAGES_DIR/index.html"
+fi
+
+# 線上版要對得回一個 commit，出 bug 時才重現得了。
+printf '%s\n' "$SOURCE_SHA" > "$PAGES_DIR/version.txt"
+
 cd "$PAGES_DIR"
 git init -q -b gh-pages
 git add -A
 git -c user.name="$(git -C ../.. config user.name)" \
 	-c user.email="$(git -C ../.. config user.email)" \
-	commit -q -m "發佈網頁版 $(date '+%Y-%m-%d %H:%M')"
+	commit -q -m "發佈網頁版 ${SOURCE_SHA} $(date '+%Y-%m-%d %H:%M')"
 git remote add origin "$REMOTE"
 
 echo
 echo "== 推送 =="
 # 每次都重建單一 commit，所以要 force。gh-pages 上沒有需要保留的歷史。
-git push -q --force origin gh-pages
+# 不加 -q：推送是這支腳本唯一不可逆的動作，輸出要看得到。
+git push --force origin gh-pages
 
-cd ../..
+cd "$ROOT"
 echo
-echo "已發佈。網址："
-echo "  https://$(echo "$REMOTE" | sed -E 's#.*github.com[:/]([^/]+)/([^/.]+)(\.git)?#\1.github.io/\2#')/"
+echo "已發佈 ${SOURCE_SHA}。網址："
+echo "  ${SITE}/"

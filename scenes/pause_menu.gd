@@ -22,7 +22,7 @@ const VOLUME_STEPS := [0.0, 0.25, 0.5, 0.75, 1.0]
 
 const SELECTED_TINT := Color(1, 1, 1)
 const IDLE_TINT := Color(0.62, 0.67, 0.76)
-const BUTTON_FONT := "res://assets/fonts/NotoSansTC-Bold.otf"
+const BUTTON_FONT := "res://assets/fonts/NotoSansTC-Bold.subset.otf"
 const BUTTON_FONT_SIZE := 22
 
 var _index := 0

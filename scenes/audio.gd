@@ -15,7 +15,6 @@ const SETTINGS_PATH := "user://settings.cfg"
 var _voices: Array[AudioStreamPlayer] = []
 var _next_voice := 0
 var _music: AudioStreamPlayer
-var _streams: Dictionary = {}
 
 var sfx_volume := 0.8
 var music_volume := 0.5
@@ -34,18 +33,11 @@ func _ready() -> void:
 	_music.finished.connect(_loop_music)
 	add_child(_music)
 
-	for name in AudioLibrary.sound_names():
-		var stream := load(AudioLibrary.sound_path(name))
-		if stream == null:
-			push_error("音效載入失敗：%s" % name)
-			continue
-		_streams[name] = stream
-
 	load_settings()
 
 
 func play(name: String) -> void:
-	var stream: AudioStream = _streams.get(name)
+	var stream := AudioLibrary.sound(name)
 	if stream == null:
 		return
 	# 輪流用下一個播放器。滿了就從頭覆蓋——蓋掉最舊的那個聲音，
@@ -59,10 +51,7 @@ func play(name: String) -> void:
 func play_music() -> void:
 	if _music.playing:
 		return
-	var stream := load(AudioLibrary.MUSIC_PATH)
-	if stream == null:
-		return
-	_music.stream = stream
+	_music.stream = AudioLibrary.MUSIC
 	_music.play()
 
 

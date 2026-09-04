@@ -15,7 +15,7 @@ const BOSS_SHOT_SCENE := preload("res://scenes/boss_shot.tscn")
 const COIN_TEXTURE := preload("res://assets/coin.png")
 
 ## 程式建立的 Label 用內建字型會變成一排方塊，所以自己指定。
-const POPUP_FONT := preload("res://assets/fonts/NotoSansTC-Bold.otf")
+const POPUP_FONT := preload("res://assets/fonts/NotoSansTC-Bold.subset.otf")
 const POPUP_FONT_SIZE := 26
 
 ## 頂出來的金幣飛多高、多久。飛完就消失，不必玩家再去撿——

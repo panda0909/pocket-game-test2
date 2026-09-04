@@ -1,0 +1,40 @@
+name: 驗證
+
+# 為什麼需要這個：專案原本完全沒有 CI，測試只在有人記得跑的時候才有效。
+# 配合 run_tests.sh 舊有的兩個洞（零測試也算通過、整合測試會永久掛住），
+# 這套測試的守門能力實際上等於零。
+#
+# 這裡只跑測試，不做匯出。匯出需要 Godot 的匯出範本，那是另一回事，
+# 而測試是每次 push 都該擋下來的東西。
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container:
+      image: barichello/godot-ci:4.4.1
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 確認素材管線可重現
+        run: |
+          python3 -m pip install --quiet --break-system-packages \
+            -r tools/requirements.txt
+          python3 tools/build_level1.py
+          python3 tools/prepare_audio.py
+          # 產生式資產與腳本必須一致。有人手改了 PNG 卻沒改腳本的話，
+          # 下次重跑就會被蓋掉，而沒有任何機制會發現。
+          git diff --exit-code levels/ assets/audio/ \
+            || { echo "產生出來的檔案和版控裡的不一致"; exit 1; }
+
+      - name: 語法檢查與測試
+        env:
+          GODOT: godot
+          INTEGRATION_TIMEOUT: "420"
+        run: tools/verify_game.sh
