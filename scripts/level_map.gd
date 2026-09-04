@@ -18,6 +18,9 @@ extends RefCounted
 ## 落點由 Main 指定，所以跳過那兩條驗證。
 const SEPARATOR := "---"
 const DEFAULT_TIME := 300
+## 關卡檔損毀成亂碼時，每格一則錯誤會產生數千則字串，Main 再逐則
+## push_error，在 Web 版會明顯凍結。超過就收成一行總結。
+const MAX_CHAR_ERRORS := 20
 
 var errors: Array[String] = []
 var width := 0
@@ -74,8 +77,11 @@ func _parse(text: String) -> void:
 	_validate()
 
 
-## 切出中繼資料與地圖兩段，回傳地圖行。找不到分界線就把全部當地圖——
-## 這讓測試可以只寫地圖，不必每次都補標頭。
+## 切出中繼資料與地圖兩段，回傳地圖行。
+##
+## 分界線是必要的，不是可選的：「#」在中繼資料區是註解、在地圖區是地面磚，
+## 沒有分界線就無從分辨。以前找不到分界線時會把全部當地圖，結果是有人寫了
+## 一行註解卻得到一整排地面加上一串「未知字元」錯誤。
 func _split_header(lines: PackedStringArray) -> PackedStringArray:
 	var sep := -1
 	for i in lines.size():
@@ -83,7 +89,8 @@ func _split_header(lines: PackedStringArray) -> PackedStringArray:
 			sep = i
 			break
 	if sep < 0:
-		return lines
+		errors.append("關卡檔必須有一行 %s 分界線，用來隔開中繼資料與地圖" % SEPARATOR)
+		return PackedStringArray()
 
 	for i in sep:
 		var line := lines[i].strip_edges()
@@ -126,6 +133,7 @@ func _read_map(map_lines: PackedStringArray) -> void:
 
 	var spawn_count := 0
 	var goal_count := 0
+	var unknown_chars := 0
 
 	for y in height:
 		var row: String = rows[y]
@@ -141,7 +149,9 @@ func _read_map(map_lines: PackedStringArray) -> void:
 
 			var type := TileGlossary.entity_type(ch)
 			if type.is_empty():
-				errors.append("第 %d 行第 %d 欄有未知字元「%s」" % [y + 1, x + 1, ch])
+				unknown_chars += 1
+				if unknown_chars <= MAX_CHAR_ERRORS:
+					errors.append("第 %d 行第 %d 欄有未知字元「%s」" % [y + 1, x + 1, ch])
 				continue
 
 			if type == "spawn":
@@ -157,6 +167,9 @@ func _read_map(map_lines: PackedStringArray) -> void:
 				"params": _entity_params(ch, type),
 			})
 		terrain.append(cells)
+
+	if unknown_chars > MAX_CHAR_ERRORS:
+		errors.append("另有 %d 個未知字元未逐一列出" % (unknown_chars - MAX_CHAR_ERRORS))
 
 	if not is_room:
 		if spawn_count != 1:

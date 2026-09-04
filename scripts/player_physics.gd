@@ -85,6 +85,17 @@ static func step(velocity: Vector2, input: Dictionary, on_floor: bool,
 	}
 
 
+## 由水平速度決定面向，速度為零時沿用上一次的方向。
+##
+## 不要寫成 signi(int(velocity.x))：|vx| 落在 (1e-5, 1) 時 is_zero_approx
+## 不成立、int() 卻截斷成 0，signi(0) 回 0——主角的 scale.x 會變成 0
+## （整隻消失一幀），丟出去的金幣方向也會是 0。
+static func facing_from_velocity(horizontal_speed: float, current_facing: int) -> int:
+	if is_zero_approx(horizontal_speed):
+		return current_facing
+	return 1 if horizontal_speed > 0.0 else -1
+
+
 static func stomp_velocity(jump_held: bool) -> float:
 	return STOMP_BOUNCE_HELD if jump_held else STOMP_BOUNCE
 

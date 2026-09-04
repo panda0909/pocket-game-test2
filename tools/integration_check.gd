@@ -37,6 +37,12 @@ func _ready() -> void:
 	await _check_tapping_shift_throws_a_coin()
 	await _check_end_menu_appears_and_navigates()
 	await _check_share_actions_degrade_outside_web()
+	await _check_pipe_round_trip_keeps_run_stats()
+	await _check_pipe_entry_keeps_big_size()
+	await _check_checkpoint_survives_pipe_round_trip()
+	await _check_death_costs_one_life_and_respawns()
+	await _check_death_in_room_still_costs_a_life()
+	await _check_broken_level_does_not_start_playing()
 
 	print("---")
 	print("通過 %d　失敗 %d" % [_passed, _failed])
@@ -569,8 +575,8 @@ func _check_checkpoint_stops_listening_once_taken() -> void:
 	await get_tree().process_frame
 
 	_expect(bool(checkpoint.get("_taken")), "走進檢查點會標記為已通過")
-	_expect(main.get("_spawn") == checkpoint.global_position,
-		"重生點移到檢查點", "spawn=%s" % main.get("_spawn"))
+	_expect(main.call("_respawn_position") == checkpoint.global_position,
+		"重生點移到檢查點", "重生點=%s" % main.call("_respawn_position"))
 	_expect(not checkpoint.monitorable,
 		"通過後的檢查點不再被偵測（賦值沒有被物理訊號擋掉）")
 	main.queue_free()
@@ -616,5 +622,180 @@ func _check_goal_opens_when_coin_shot_kills_boss() -> void:
 		"分數 %d -> %d" % [score_before, main.stats.score])
 	_expect(goal.monitorable,
 		"金幣打死 Boss 後旗竿碰得到（賦值沒有被物理訊號擋掉）")
+	main.queue_free()
+	await get_tree().process_frame
+
+
+## --- 水管暗房與死亡：整條主線原本零覆蓋 ---
+
+## 站上水管、按 ↓ 進去，回傳是否真的換了關卡。
+func _enter_pipe(main: Node) -> bool:
+	var pipe: Node2D = _first_in_group(main, "pipe")
+	if pipe == null:
+		return false
+	var player: Player = main.get_node("Player")
+	player.enter_level(pipe.global_position + Vector2(0, -40))
+	for i in 30:
+		await get_tree().physics_frame
+		if not str(player.get("_standing_pipe")).is_empty():
+			break
+	if str(player.get("_standing_pipe")).is_empty():
+		return false
+	await _tap(KEY_DOWN)
+	await get_tree().physics_frame
+	await get_tree().process_frame
+	return true
+
+
+## 掉出關卡下緣觸發死亡，等死亡延遲跑完。
+func _die_by_falling(main: Node) -> void:
+	var player: Player = main.get_node("Player")
+	player.global_position.y = 100000.0
+	for i in 180:
+		await get_tree().physics_frame
+		if not bool(main.get("_death_pending")):
+			if player.global_position.y < 90000.0:
+				return
+	await get_tree().process_frame
+
+
+## 進暗房再回來，分數、金幣、生命、剩餘時間全部要延續。
+##
+## 原本 _load_level 用 not _in_room 判斷要不要重建 stats，而 _return_to_level
+## 在呼叫它之前就把旗標設回 false——玩家撿完暗房的金幣走回來，整局成績歸零。
+func _check_pipe_round_trip_keeps_run_stats() -> void:
+	var main := await _make_main()
+	main.begin_game()
+	await get_tree().physics_frame
+	main.stats.add_score(4321)
+	main.stats.add_coin()
+	main.stats.add_coin()
+	main.stats.lose_life()
+	var score_before: int = main.stats.score
+	var coins_before: int = main.stats.coins
+	var lives_before: int = main.stats.lives
+
+	if not await _enter_pipe(main):
+		_fail("主關卡有可進入的水管")
+		main.queue_free()
+		await get_tree().process_frame
+		return
+	_ok("主關卡有可進入的水管")
+	_expect(bool(main.get("_in_room")), "按 ↓ 之後進到暗房")
+	_expect(main.stats.score == score_before,
+		"進暗房不會洗掉分數", "%d -> %d" % [score_before, main.stats.score])
+
+	main.call("_return_to_level")
+	await get_tree().physics_frame
+	await get_tree().process_frame
+
+	_expect(not bool(main.get("_in_room")), "回到主關卡")
+	_expect(main.stats.score == score_before,
+		"回主關卡後分數延續", "%d -> %d" % [score_before, main.stats.score])
+	_expect(main.stats.coins == coins_before,
+		"回主關卡後金幣延續", "%d -> %d" % [coins_before, main.stats.coins])
+	_expect(main.stats.lives == lives_before,
+		"回主關卡後生命不會補滿", "%d -> %d" % [lives_before, main.stats.lives])
+	main.queue_free()
+	await get_tree().process_frame
+
+
+## 進水管不該把大牛變回小牛——換場不是重生。
+func _check_pipe_entry_keeps_big_size() -> void:
+	var main := await _make_main()
+	main.begin_game()
+	await get_tree().physics_frame
+	var player: Player = main.get_node("Player")
+	player.grow()
+	_expect(player.state.is_big(), "先變成大牛")
+
+	if not await _enter_pipe(main):
+		_fail("主關卡有可進入的水管（變身測試）")
+		main.queue_free()
+		await get_tree().process_frame
+		return
+	_expect(player.state.is_big(), "進暗房之後還是大牛")
+	main.queue_free()
+	await get_tree().process_frame
+
+
+## 檢查點要撐過一次水管往返。
+func _check_checkpoint_survives_pipe_round_trip() -> void:
+	var main := await _make_main()
+	main.begin_game()
+	await get_tree().physics_frame
+	var checkpoint: Node2D = _first_in_group(main, "checkpoint")
+	if checkpoint == null:
+		_fail("主關卡有檢查點（水管測試）")
+		main.queue_free()
+		await get_tree().process_frame
+		return
+	var flag_position: Vector2 = checkpoint.global_position
+	main.call("_on_checkpoint_reached", flag_position)
+	await get_tree().physics_frame
+
+	if not await _enter_pipe(main):
+		_fail("主關卡有可進入的水管（檢查點測試）")
+		main.queue_free()
+		await get_tree().process_frame
+		return
+	main.call("_return_to_level")
+	await get_tree().physics_frame
+	await get_tree().process_frame
+
+	_expect(main.call("_respawn_position") == flag_position,
+		"水管往返之後檢查點還在",
+		"重生點=%s 應為 %s" % [main.call("_respawn_position"), flag_position])
+	main.queue_free()
+	await get_tree().process_frame
+
+
+## 死亡要剛好扣一條命並回到遊玩狀態。
+func _check_death_costs_one_life_and_respawns() -> void:
+	var main := await _make_main()
+	main.begin_game()
+	await get_tree().physics_frame
+	var lives_before: int = main.stats.lives
+	await _die_by_falling(main)
+
+	_expect(main.stats.lives == lives_before - 1,
+		"掉出關卡剛好扣一條命", "%d -> %d" % [lives_before, main.stats.lives])
+	_expect(main.flow_state == Flow.PLAYING,
+		"還有命就回到遊玩狀態", "flow_state=%d" % main.flow_state)
+	main.queue_free()
+	await get_tree().process_frame
+
+
+## 在暗房裡死掉一樣要扣命。
+##
+## 原本 _respawn 在 _in_room 為真時會重載關卡並重建 stats，生命因此回到滿——
+## 玩家只要待在暗房就有無限命。
+func _check_death_in_room_still_costs_a_life() -> void:
+	var main := await _make_main()
+	main.begin_game()
+	await get_tree().physics_frame
+	if not await _enter_pipe(main):
+		_fail("主關卡有可進入的水管（暗房死亡測試）")
+		main.queue_free()
+		await get_tree().process_frame
+		return
+	var lives_before: int = main.stats.lives
+	await _die_by_falling(main)
+	_expect(main.stats.lives == lives_before - 1,
+		"在暗房裡死掉一樣扣命", "%d -> %d" % [lives_before, main.stats.lives])
+	main.queue_free()
+	await get_tree().process_frame
+
+
+## 關卡檔壞掉時要停在標題並說明，不能讓玩家掉進沒有地形的虛空。
+##
+## 原本 _load_level 解析失敗只 push_error 就 return，_map 維持 null，
+## 而掉出關卡的死亡判定有 _map == null 的早退——主角會無限下墜且永遠不判死。
+func _check_broken_level_does_not_start_playing() -> void:
+	var main := await _make_main()
+	var loaded: bool = main.call("_load_level", "res://levels/根本不存在.txt")
+	_expect(not loaded, "壞掉的關卡回報載入失敗")
+	_expect(main.flow_state != Flow.PLAYING,
+		"關卡載不起來就不會進入遊玩狀態", "flow_state=%d" % main.flow_state)
 	main.queue_free()
 	await get_tree().process_frame

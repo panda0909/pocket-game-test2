@@ -13,6 +13,8 @@ const BOSS_SHOT_SCENE := preload("res://scenes/boss_shot.tscn")
 ## 他已經頂到了，再讓他追一顆金幣只是多餘的操作。
 const COIN_POP_HEIGHT := 96.0
 const COIN_POP_TIME := 0.45
+## 死亡後畫面停頓多久才重生。
+const DEATH_PAUSE := 0.9
 
 var stats := RunStats.new()
 var flow_state := Flow.TITLE
@@ -22,11 +24,17 @@ var character_index := Roster.DEFAULT_INDEX
 
 var _map: LevelMap
 var _level_path := MAIN_LEVEL
+## 關卡起點（地圖上的 S）。每次載入主關卡都會重算。
 var _spawn := Vector2.ZERO
+## 玩家拿到的檢查點。與 _spawn 分開存，否則進一次水管就會被關卡起點蓋掉，
+## 玩家吃了三面旗子再死一次，還是被丟回關卡最左邊。
+var _checkpoint := Vector2.INF
 ## 進水管前站的位置。從暗房回來時要放回這裡，玩家才不會迷失方向。
 var _return_position := Vector2.INF
 var _in_room := false
 var _death_pending := false
+## 關卡檔壞掉時停在標題並說明，不要讓玩家掉進沒有地形的虛空。
+var _level_broken := false
 
 @onready var _tiles: TileMapLayer = $Tiles
 @onready var _entities: Node2D = $Entities
@@ -39,7 +47,6 @@ var _death_pending := false
 func _ready() -> void:
 	if not ResourceLoader.exists(_level_path) and not FileAccess.file_exists(_level_path):
 		_level_path = "res://levels/dev.txt"
-	_load_level(_level_path)
 	_connect_player()
 	_select.moved.connect(_on_select_moved)
 	_select.confirmed.connect(_on_select_confirmed)
@@ -48,25 +55,41 @@ func _ready() -> void:
 	_enter_state(Flow.TITLE)
 
 
-func _load_level(path: String, spawn_override := Vector2.INF) -> void:
+## 載入一張關卡，回傳是否成功。
+##
+## keep_stats 必須由呼叫端明講，不要從 _in_room 推導。以前推導的寫法造成兩個
+## bug：_return_to_level 與 _respawn 都在呼叫這裡之前就把 _in_room 設回 false，
+## 於是從暗房走回來會重建 RunStats——分數金幣歸零、生命補滿，等於在暗房裡
+## 死掉不用扣命。
+func _load_level(path: String, spawn_override := Vector2.INF,
+		keep_stats := false) -> bool:
 	var map := LevelMap.load_from(path)
 	if not map.is_valid():
 		for message in map.errors:
 			push_error("關卡 %s：%s" % [path, message])
-		return
+		return false
 
 	_map = map
 	var result := LevelBuilder.build(_map, _tiles, _entities)
 	# 分數與計時活在 Main，不隨關卡重建——進暗房不該把時間洗掉。
-	if not _in_room:
+	if not keep_stats:
 		stats = RunStats.new(_map.time_limit)
-	_spawn = result["spawn_position"] if not _map.is_room else spawn_override
+	# 暗房沒有 S，關卡起點沿用主關卡的，回來時才找得到路。
+	if not _map.is_room:
+		_spawn = result["spawn_position"]
 	var start: Vector2 = spawn_override if spawn_override.is_finite() \
 		else result["spawn_position"]
-	_player.respawn_at(start)
+	# 換場不是重生：保留變身狀態，不然按 ↓ 的瞬間大牛就變回小牛。
+	_player.enter_level(start)
 	_player.set_character(character_index)
 	_player.set_camera_bounds(result["level_size"])
 	_connect_level_nodes()
+	return true
+
+
+## 玩家死亡後該站回哪裡：拿過檢查點就回檢查點，否則回關卡起點。
+func _respawn_position() -> Vector2:
+	return _checkpoint if _checkpoint.is_finite() else _spawn
 
 
 ## 關卡裡的節點是建構器生成的，Main 建完才接訊號。
@@ -174,25 +197,49 @@ func _on_pipe_entered(target: String) -> void:
 	if target == "__return__":
 		_return_to_level()
 		return
-	_return_position = _player.global_position
+	var back := _player.global_position
+	var room_path := "res://levels/%s.txt" % target
+	var entry := _room_entry(room_path)
+	# 旗標只在真的換場成功之後才翻。以前先設 _in_room = true 再載入，
+	# 暗房檔壞掉時畫面完全沒變，旗標卻永久卡在 true——之後檢查點全部失效。
+	if not _load_level(room_path, entry, true):
+		return
+	_return_position = back
 	_in_room = true
-	_load_level("res://levels/%s.txt" % target, Vector2(160, 448))
+
+
+## 暗房的落點由關卡自己的中繼資料 entry: x,y 指定。
+## 以前寫死成 Vector2(160, 448)，那是專為現在這張 20x8 暗房算出來的像素座標——
+## 換一張形狀不同的暗房，玩家就會生在牆裡或半空中。
+func _room_entry(room_path: String) -> Vector2:
+	var room := LevelMap.load_from(room_path)
+	if not room.is_valid():
+		return Vector2.INF
+	var raw := str(room.meta.get("entry", ""))
+	var parts := raw.split(",")
+	if parts.size() != 2 or not parts[0].strip_edges().is_valid_int() \
+			or not parts[1].strip_edges().is_valid_int():
+		push_error("暗房 %s 缺少 entry: x,y 中繼資料" % room_path)
+		return Vector2.INF
+	return LevelBuilder.cell_bottom(Vector2i(
+		int(parts[0].strip_edges()), int(parts[1].strip_edges())))
 
 
 func _return_to_level() -> void:
 	if not _in_room:
 		return
-	_in_room = false
-	var back := _return_position
-	_return_position = Vector2.INF
 	# 放在原水管右邊一格，免得一回來就又踩進管口無限往返
-	_load_level(_level_path, back + Vector2(LevelBuilder.TILE, 0))
+	if not _load_level(_level_path,
+			_return_position + Vector2(LevelBuilder.TILE, 0), true):
+		return
+	_in_room = false
+	_return_position = Vector2.INF
 
 
 func _on_checkpoint_reached(position: Vector2) -> void:
 	if _in_room:
 		return
-	_spawn = position
+	_checkpoint = position
 	for node in _entities.get_children():
 		if node.is_in_group("checkpoint") and node.global_position == position:
 			node.mark_taken()
@@ -252,7 +299,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if not event.is_action_pressed("jump"):
 		return
-	if flow_state == Flow.TITLE:
+	if flow_state == Flow.TITLE and not _level_broken:
 		_advance("start")
 
 
@@ -319,8 +366,12 @@ func _enter_state(state: int, event := "") -> void:
 	match state:
 		Flow.TITLE:
 			_restart_run()
-			_hud.show_message("口袋牛牛大冒險",
-				"按空白鍵開始　　方向鍵／WASD 移動　空白鍵跳　Shift 丟金幣　↓ 進水管")
+			if _level_broken:
+				_hud.show_message("關卡載入失敗",
+					"%s 讀不起來，請看主控台的錯誤訊息" % _level_path)
+			else:
+				_hud.show_message("口袋牛牛大冒險",
+					"按空白鍵開始　　方向鍵／WASD 移動　空白鍵跳　Shift 丟金幣　↓ 進水管")
 		Flow.SELECT:
 			_hud.hide_message()
 			_select.show_index(character_index)
@@ -341,16 +392,19 @@ func _enter_state(state: int, event := "") -> void:
 func _restart_run() -> void:
 	_in_room = false
 	_return_position = Vector2.INF
-	_load_level(_level_path)
+	_checkpoint = Vector2.INF
+	# 新的一局：這是唯一該重建 RunStats 的地方。
+	_level_broken = not _load_level(_level_path)
 
 
 func _respawn() -> void:
 	if _in_room:
-		_in_room = false
-		_return_position = Vector2.INF
-		_load_level(_level_path)
+		# 在暗房裡死掉要回到主關卡，但成績要延續——扣掉的那條命不能被補回來。
+		if _load_level(_level_path, Vector2.INF, true):
+			_in_room = false
+			_return_position = Vector2.INF
 	stats.restart_level()
-	_player.respawn_at(_spawn)
+	_player.respawn_at(_respawn_position())
 
 
 ## 死亡統一走這裡：先扣命再問流程要去哪，順序反了會出現
@@ -361,8 +415,12 @@ func _kill_player() -> void:
 	_death_pending = true
 	_player.control_enabled = false
 	stats.lose_life()
-	await get_tree().create_timer(0.9).timeout
+	await get_tree().create_timer(DEATH_PAUSE).timeout
 	_death_pending = false
+	# 這 0.9 秒裡屍體還帶著慣性，可能滑進旗竿而進入 CLEARED。
+	# 這時再送一次 "died" 會讓結束畫面重跑一遍，游標與提示文字被洗掉。
+	if not Flow.counts_down(flow_state):
+		return
 	_advance("died")
 
 
@@ -370,11 +428,15 @@ func _kill_player() -> void:
 
 ## 只走到選角畫面就停，供擷圖確認。
 func begin_game_to_select() -> void:
+	if _level_broken:
+		return
 	if flow_state == Flow.TITLE:
 		_advance("start")
 
 
 func begin_game(index := -1) -> void:
+	if _level_broken:
+		return
 	if index >= 0:
 		character_index = Roster.clamp_index(index)
 	if flow_state == Flow.TITLE:

@@ -178,3 +178,24 @@ func test_sprint_only_ever_lengthens_the_jump() -> void:
 func test_walk_jump_still_clears_a_four_cell_gap() -> void:
 	assert_gt(PlayerPhysics.jump_distance(PlayerPhysics.MAX_RUN_SPEED),
 		4.0 * 64.0)
+
+# --- 面向方向 ---
+# 原本寫在 Player 裡的 signi(int(velocity.x))：只要 |vx| 落在 (1e-5, 1)，
+# is_zero_approx 不成立但 int() 截斷成 0，signi(0) 回 0，
+# 主角的 sprite.scale.x 會變成 0（整個看不見），丟出的金幣方向也是 0。
+
+func test_facing_is_positive_when_moving_right() -> void:
+	assert_eq(PlayerPhysics.facing_from_velocity(120.0, -1), 1)
+
+func test_facing_is_negative_when_moving_left() -> void:
+	assert_eq(PlayerPhysics.facing_from_velocity(-120.0, 1), -1)
+
+func test_facing_keeps_previous_when_stopped() -> void:
+	assert_eq(PlayerPhysics.facing_from_velocity(0.0, -1), -1)
+	assert_eq(PlayerPhysics.facing_from_velocity(0.0, 1), 1)
+
+func test_facing_never_returns_zero_for_tiny_speeds() -> void:
+	# 這正是舊寫法會回 0 的區間。
+	for speed in [0.5, 0.1, 0.001, -0.5, -0.999]:
+		var f := PlayerPhysics.facing_from_velocity(speed, 1)
+		assert_ne(f, 0, "速度 %s 不該讓面向變成 0" % speed)

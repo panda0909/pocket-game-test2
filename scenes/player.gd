@@ -141,14 +141,27 @@ func grow() -> String:
 	return outcome
 
 
+## 換場：只搬位置，保留變身狀態與能力。
+##
+## 進水管暗房走的是這條。以前換場也呼叫 respawn_at，於是按 ↓ 的瞬間
+## state.reset() 就把大牛打回小牛——玩家完全不知道自己為什麼縮水了。
+func enter_level(pos: Vector2) -> void:
+	_place_at(pos)
+
+
+## 重生：換場再加上狀態重設（變回小牛、清掉無敵）。
 func respawn_at(pos: Vector2) -> void:
+	state.reset()
+	_place_at(pos)
+
+
+func _place_at(pos: Vector2) -> void:
 	global_position = pos
 	velocity = Vector2.ZERO
 	_timers = PlayerPhysics.new_timers()
 	_previous_feet_y = pos.y
-	state.reset()
-	control_enabled = true
 	_impulse_scale = Vector2.ONE
+	_standing_pipe = ""
 	_refresh_sprite_texture(false)
 	_apply_size()
 	# 重生要瞬間切鏡，不然相機會從死亡地點慢慢滑回檢查點，
@@ -198,8 +211,7 @@ func _punch_scale(target: Vector2, duration: float) -> void:
 
 
 func _update_visual(delta: float) -> void:
-	if not is_zero_approx(velocity.x):
-		_facing = signi(int(velocity.x))
+	_facing = PlayerPhysics.facing_from_velocity(velocity.x, _facing)
 
 	# 分母用衝刺速度，否則衝刺時比值會超過 1，跑步循環與彈跳幅度都算爆。
 	var speed_ratio := minf(absf(velocity.x) / PlayerPhysics.SPRINT_SPEED, 1.0)
