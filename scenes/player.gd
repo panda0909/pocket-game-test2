@@ -68,7 +68,7 @@ var _standing_pipe := ""
 var _input_grace_frames := 0
 var _traits := Roster.traits(Roster.DEFAULT_INDEX)
 var _death_tween: Tween = null
-var _active_texture_path := ""
+var _active_texture: Texture2D = null
 
 @onready var _sprite: Sprite2D = $Sprite
 @onready var _body_shape: CollisionShape2D = $BodyShape
@@ -169,12 +169,12 @@ func apply_stomp(jump_held: bool) -> void:
 ## 受傷。回傳 PlayerState 的結果字串，讓 Main 決定是扣命還是只變小。
 func take_hit() -> String:
 	var outcome := state.take_hit()
-	if outcome == "shrank":
+	if outcome == PlayerState.SHRANK:
 		Audio.play("hurt")
 		_apply_size()
 		_refresh_sprite_texture(false)
 		_punch_scale(Vector2(1.35, 0.65), 0.25)
-	elif outcome == "died":
+	elif outcome == PlayerState.DIED:
 		died.emit()
 	return outcome
 
@@ -217,7 +217,7 @@ func revive() -> void:
 
 func grow() -> String:
 	var outcome := state.collect_milk()
-	if outcome == "grew":
+	if outcome == PlayerState.GREW:
 		Audio.play("powerup")
 		_apply_size()
 		_refresh_sprite_texture(false)
@@ -348,15 +348,15 @@ func _update_visual(delta: float) -> void:
 func _refresh_sprite_texture(walking: bool) -> void:
 	if _sprite == null:
 		return
-	var path := Roster.texture_path(character_index)
+	var texture := Roster.texture(character_index)
 	if walking:
-		path = Roster.walk_texture_path(character_index)
+		texture = Roster.walk_texture(character_index)
 	elif state.is_big():
-		path = Roster.big_texture_path(character_index)
-	if path == _active_texture_path:
+		texture = Roster.big_texture(character_index)
+	if texture == _active_texture:
 		return
-	_sprite.texture = load(path)
-	_active_texture_path = path
+	_sprite.texture = texture
+	_active_texture = texture
 
 
 ## 頂磚塊。撞到天花板時碰撞法線是朝下的（從表面指向玩家）。

@@ -16,9 +16,12 @@ func test_coin_adds_coin_and_score() -> void:
 	assert_eq(r.coins, 1)
 	assert_eq(r.score, RunStats.COIN_SCORE)
 
-func test_stomp_adds_score_only() -> void:
-	r.add_stomp()
-	assert_eq(r.score, RunStats.STOMP_SCORE)
+## 踩踏分數的唯一出處是 EnemyRules。RunStats 以前另外有一份 STOMP_SCORE
+## 與 add_stomp()，只有測試在用——正式流程走的是 add_score(EnemyRules.score())，
+## 而那份重複的常數讓讀程式的人以為它是活的 API。
+func test_enemy_score_comes_from_enemy_rules() -> void:
+	r.add_score(EnemyRules.score(EnemyRules.KIND_BEAR))
+	assert_eq(r.score, EnemyRules.score(EnemyRules.KIND_BEAR))
 	assert_eq(r.coins, 0)
 
 func test_milk_bonus_adds_score() -> void:

@@ -205,8 +205,8 @@ func _check_player_runs_and_jumps() -> void:
 func _check_milk_lands_within_reach() -> void:
 	var main := await _make_main()
 	var block: Node = null
-	for node in main.get_node("Entities").get_children():
-		if node.is_in_group("block") \
+	for node in get_tree().get_nodes_in_group("block"):
+		if main.is_ancestor_of(node) \
 				and node.kind == TileGlossary.KIND_MILK_BRICK:
 			block = node
 			break
@@ -222,11 +222,8 @@ func _check_milk_lands_within_reach() -> void:
 	var milk: Node2D = null
 	for i in 180:
 		await get_tree().physics_frame
-		for node in main.get_node("Entities").get_children():
-			if node.is_in_group("powerup"):
-				milk = node
-				break
-		if milk != null and bool(milk.get("_landed")):
+		milk = _first_in_group(main, "powerup")
+		if milk != null and milk.is_landed():
 			break
 
 	if milk == null:
@@ -490,11 +487,32 @@ func _make_main() -> Node:
 func _check_main_scene_builds() -> void:
 	var main := await _make_main()
 	var map := LevelMap.load_from("res://levels/level1.txt")
-	var entities: Node = main.get_node("Entities")
-	# 實體節點 = 關卡實體 + 每一格地刺各一個 Area2D + 三種要節點化的磚塊
-	_expect(entities.get_child_count() >= map.entities.size(),
-		"實體全部建構", "節點 %d < 實體 %d" % [
-			entities.get_child_count(), map.entities.size()])
+
+	# 逐類精確比對，不是拿總數用 >= 帶過。
+	#
+	# 舊的斷言是「節點總數 >= 關卡實體數」，而實際節點數遠大於實體數（還有
+	# 地刺與三種節點化磚塊墊著）。結果是：_make_entity 對認不得的型別會靜靜
+	# 回 null 再被 continue 略過，有人把 "checkpoint" 打成 "checkpont"，整關的
+	# 檢查點會全部消失而總數仍然 >=，測試照樣綠。
+	var wanted: Dictionary = {}
+	for entity in map.entities:
+		var group := _group_of(entity["type"])
+		if group.is_empty():
+			continue
+		wanted[group] = int(wanted.get(group, 0)) + 1
+	for group in wanted:
+		var built := 0
+		for node in get_tree().get_nodes_in_group(group):
+			if not main.is_ancestor_of(node):
+				continue
+			# Boss 同時在 boss 與 enemy 兩個群組，算 enemy 時要扣掉，
+			# 不然關卡寫 17 隻會數出 18 隻。
+			if group == "enemy" and node.is_in_group("boss"):
+				continue
+			built += 1
+		_expect(built == int(wanted[group]),
+			"關卡裡的 %s 全部建出來了" % group,
+			"關卡寫了 %d 個，場上只有 %d 個" % [wanted[group], built])
 	_expect(main.get_node("Tiles").get_used_cells().size() > 500,
 		"地形寫進 TileMapLayer",
 		"只有 %d 格" % main.get_node("Tiles").get_used_cells().size())
@@ -560,9 +578,13 @@ func _check_scoring_and_flow() -> void:
 	await get_tree().process_frame
 
 
+## 在整個 Main 子樹裡找群組成員，而不是寫死 Entities 這個節點路徑。
+##
+## 寫死路徑的代價是：main.tscn 改一個節點名字，整份整合測試會靜靜地
+## 找不到東西然後開始失敗，而錯誤訊息只會說「主關卡沒有牛奶」。
 func _first_in_group(main: Node, group: String) -> Node2D:
-	for node in main.get_node("Entities").get_children():
-		if node.is_in_group(group):
+	for node in get_tree().get_nodes_in_group(group):
+		if node is Node2D and main.is_ancestor_of(node):
 			return node
 	return null
 
@@ -883,7 +905,7 @@ func _check_dead_enemy_stops_being_an_enemy() -> void:
 func _check_share_copy_reports_failure_in_headless() -> void:
 	var main := await _make_main()
 	main.begin_game()
-	main.call("_advance", "goal")
+	main.call("_advance", Flow.GOAL)
 	await get_tree().process_frame
 	var menu: EndMenu = main.get_node("EndMenu")
 	main.call("_on_end_menu_chosen", "copy")
@@ -944,7 +966,7 @@ func _check_pause_is_released_on_state_change() -> void:
 	await get_tree().physics_frame
 	main.get_node("PauseMenu").open()
 	_expect(get_tree().paused, "先把樹暫停起來")
-	main.call("_advance", "goal")
+	main.call("_advance", Flow.GOAL)
 	await get_tree().process_frame
 	_expect(not get_tree().paused, "通關之後樹不會卡在暫停")
 	main.queue_free()
@@ -957,9 +979,22 @@ func _check_finishing_a_run_records_the_score() -> void:
 	main.begin_game()
 	await get_tree().physics_frame
 	main.stats.add_score(7777)
-	main.call("_advance", "goal")
+	main.call("_advance", Flow.GOAL)
 	await get_tree().process_frame
 	_expect(main.save.best_score >= 7777,
 		"通關的分數進了最高分紀錄", "best_score=%d" % main.save.best_score)
 	main.queue_free()
 	await get_tree().process_frame
+
+
+## 關卡實體型別對應到它進場後所在的群組。
+func _group_of(type: String) -> String:
+	match type:
+		"coin": return "coin"
+		"goal": return "goal"
+		"checkpoint": return "checkpoint"
+		"pipe": return "pipe"
+		"boss": return "boss"
+		"platform_h", "platform_v": return "platform"
+		"bear", "spikeball", "arrow": return "enemy"
+	return ""

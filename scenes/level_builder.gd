@@ -10,9 +10,9 @@ extends RefCounted
 ## 只有「站得住又不會互動」的格子進 TileMapLayer。問號磚、牛奶磚、可破磚
 ## 都得各自記住「被頂過了沒」，那是節點的工作，不是圖磚的工作。
 
-const TILE := 64
+const TILE := TileGlossary.SIZE
 const SOURCE_ID := 0
-const TILES_TEXTURE := "res://assets/tiles.png"
+const TILES_TEXTURE := preload("res://assets/tiles.png")
 
 const COIN_SCENE := preload("res://scenes/coin.tscn")
 const GOAL_SCENE := preload("res://scenes/goal_flag.tscn")
@@ -51,9 +51,9 @@ static func build_tileset() -> TileSet:
 	var source := TileSetAtlasSource.new()
 	# 貼圖載不到就用佔位圖降級，不要讓整個 _ready() 在下一行對 null 呼叫
 	# get_width() 而崩掉——那會停在全黑畫面，連 HUD 都建不起來。
-	var atlas := load(TILES_TEXTURE) as Texture2D
+	var atlas: Texture2D = TILES_TEXTURE
 	if atlas == null:
-		push_error("圖磚貼圖載入失敗：%s" % TILES_TEXTURE)
+		push_error("圖磚貼圖載入失敗")
 		var placeholder := PlaceholderTexture2D.new()
 		placeholder.size = Vector2(TILE * 8, TILE)
 		atlas = placeholder

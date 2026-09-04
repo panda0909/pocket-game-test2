@@ -5,6 +5,15 @@ extends RefCounted
 ## 這種分支寫在節點裡沒辦法測，而它一旦寫錯，玩家會遇到「明明還有命卻結束了」
 ## 這種最惱人的 bug。
 
+## 事件名稱。以前是散在各處的字串字面值，Flow.next 對認不得的事件一律
+## 回傳原狀態——拼錯一個字的表現是「按了沒反應」，沒有任何錯誤訊息。
+const START := "start"
+const CONFIRM := "confirm"
+const BACK := "back"
+const DIED := "died"
+const GOAL := "goal"
+const RESTART := "restart"
+
 const TITLE := 0
 const PLAYING := 1
 const GAME_OVER := 2
@@ -15,22 +24,22 @@ const SELECT := 4
 static func next(state: int, event: String, lives_left: int) -> int:
 	match state:
 		TITLE:
-			if event == "start":
+			if event == START:
 				return SELECT
 		SELECT:
 			match event:
-				"confirm":
+				CONFIRM:
 					return PLAYING
-				"back":
+				BACK:
 					return TITLE
 		PLAYING:
 			match event:
-				"died":
+				DIED:
 					return PLAYING if lives_left > 0 else GAME_OVER
-				"goal":
+				GOAL:
 					return CLEARED
 		GAME_OVER, CLEARED:
-			if event == "restart":
+			if event == RESTART:
 				return TITLE
 	return state
 

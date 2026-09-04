@@ -11,7 +11,6 @@ extends RefCounted
 ## 分數已經入袋，留著只是佔位，最優解永遠是「撿到就丟」。
 
 const COIN_SCORE := 50
-const STOMP_SCORE := 100
 const MILK_BONUS_SCORE := 1000
 const TIME_BONUS_PER_SECOND := 10
 const START_LIVES := 3
@@ -38,10 +37,6 @@ func _init(time_limit: int = 300) -> void:
 func add_coin() -> void:
 	coins += 1
 	add_score(COIN_SCORE)
-
-
-func add_stomp() -> void:
-	add_score(STOMP_SCORE)
 
 
 func add_milk_bonus() -> void:

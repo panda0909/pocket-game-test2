@@ -4,7 +4,7 @@ extends AnimatableBody2D
 ## 來回移動的平台。用 AnimatableBody2D 加 sync_to_physics，站在上面的玩家
 ## 才會被一起帶著走——換成 StaticBody2D 的話玩家會在平台上滑掉。
 
-const TILE := 64
+const TILE := TileGlossary.SIZE
 const SPEED := 80.0
 const TRAVEL_H := 4
 const TRAVEL_V := 3

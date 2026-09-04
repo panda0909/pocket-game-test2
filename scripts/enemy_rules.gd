@@ -51,10 +51,12 @@ const _TYPE_TO_KIND := {
 	"arrow": KIND_ARROW,
 }
 
+## preload 而不是執行期 load：路徑打錯是編譯期就報，而且資源有了明確的
+## 參考，不必再靠 export_presets.cfg 的 include_filter 手動列白名單。
 const _TEXTURE := {
-	KIND_BEAR: "res://assets/enemies/bear.png",
-	KIND_SPIKEBALL: "res://assets/enemies/spikeball.png",
-	KIND_ARROW: "res://assets/enemies/arrow.png",
+	KIND_BEAR: preload("res://assets/enemies/bear.png"),
+	KIND_SPIKEBALL: preload("res://assets/enemies/spikeball.png"),
+	KIND_ARROW: preload("res://assets/enemies/arrow.png"),
 }
 
 ## 箭頭會主動追人，所以踩死它值多一點分。
@@ -81,8 +83,13 @@ static func kind_from_type(type: String) -> int:
 	return _TYPE_TO_KIND.get(type, -1)
 
 
+static func texture(kind: int) -> Texture2D:
+	return _TEXTURE.get(kind)
+
+
 static func texture_path(kind: int) -> String:
-	return _TEXTURE.get(kind, "")
+	var res: Texture2D = _TEXTURE.get(kind)
+	return "" if res == null else res.resource_path
 
 
 ## 巡邏轉向：前方有牆或前方沒地板就回頭。

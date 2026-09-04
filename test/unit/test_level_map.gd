@@ -149,3 +149,35 @@ func test_unknown_char_errors_are_capped() -> void:
 	var m := LevelMap.parse("---\n" + junk)
 	assert_false(m.is_valid())
 	assert_lt(m.errors.size(), 30, "錯誤訊息應該有上限，不該每格一則")
+
+
+# --- 牛奶落點 ---
+# 這兩段運算原本寫在 main.gd 上，是純 LevelMap 資料的計算卻掛在 Node2D 上，
+# 於是完全無法被單元測試覆蓋——牛奶掉錯格只能靠跑整個場景才發現。
+
+func test_ground_surface_below_finds_the_first_solid_row() -> void:
+	var m := LevelMap.parse(HEAD + "S ? F\n     \n#####")
+	assert_eq(m.ground_surface_row_below(Vector2i(2, 0)), 2)
+
+func test_ground_surface_below_falls_back_to_level_bottom() -> void:
+	# 磚塊架在坑上：整欄都沒有地面，落點就是關卡底部，
+	# 玩家至少看得到牛奶掉下去，而不是卡在半空中。
+	var m := LevelMap.parse(HEAD + "S ? F\n#   #\n#   #")
+	assert_eq(m.ground_surface_row_below(Vector2i(2, 0)), m.height)
+
+func test_drift_goes_left_when_only_the_right_is_blocked() -> void:
+	var m := LevelMap.parse(HEAD + "S ?#F\n#####")
+	assert_eq(m.drift_direction(Vector2i(2, 0)), -1)
+
+func test_drift_goes_right_when_both_sides_are_open() -> void:
+	var m := LevelMap.parse(HEAD + "S ? F\n#####")
+	assert_eq(m.drift_direction(Vector2i(2, 0)), 1)
+
+func test_drift_goes_right_when_only_the_left_is_blocked() -> void:
+	var m := LevelMap.parse(HEAD + "S#? F\n#####")
+	assert_eq(m.drift_direction(Vector2i(2, 0)), 1)
+
+func test_drift_is_safe_at_the_level_edge() -> void:
+	var m := LevelMap.parse(HEAD + "S ?F\n####")
+	var d := m.drift_direction(Vector2i(0, 0))
+	assert_true(d == 1 or d == -1, "邊緣不該回傳 0")

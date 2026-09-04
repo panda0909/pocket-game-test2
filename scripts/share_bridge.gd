@@ -3,6 +3,10 @@ extends RefCounted
 
 ## 把分享動作交給瀏覽器。這是唯一碰平台 API 的地方。
 ##
+## 放在 scripts/ 而不是 scenes/：它整支只用 OS / JavaScriptBridge /
+## DisplayServer / JSON，沒有任何節點或場景樹依賴，符合「scripts/ 放不繼承
+## Node 的純運算類別」這條分層定義。ShareText 本來就在這裡，兩者成對。
+##
 ## 非網頁環境（編輯器、headless、整合測試）一律回 false 而不是報錯——
 ## 這樣整合測試能走完整個選單流程，不必為了「這裡沒有瀏覽器」而跳過。
 ##

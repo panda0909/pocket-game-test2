@@ -31,6 +31,12 @@ func _ready() -> void:
 
 
 ## 由 Main 呼叫。target_ground_y 是地面表面的像素 y，direction 是滑落方向。
+## 落地了沒。這個欄位以前只被 tools/integration_check.gd 用反射讀取，
+## powerup 自己從不讀它——看起來像死碼，清死碼的人會順手刪掉並讓測試爆掉。
+func is_landed() -> bool:
+	return _landed
+
+
 func drop_to(target_ground_y: float, direction: int) -> void:
 	var landing := Vector2(position.x + SIDE_DRIFT * direction,
 		target_ground_y - GROUND_OFFSET)

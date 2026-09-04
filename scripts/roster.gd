@@ -15,6 +15,11 @@ extends RefCounted
 ## 純換皮的問題是選角變成純粹的延遲：那是玩家開始前的第一個決策點，
 ## 但這個決策在機制上是空的，選誰結果完全一樣。
 ##
+## 貼圖用 preload 而不是執行期 load：路徑打錯是編譯期就報，而且這些資源
+## 有了明確的參考，能不能進網頁匯出不再取決於 export_presets.cfg 的
+## include_filter 有沒有被記得更新——那種漏掉只會表現成「線上版缺圖、
+## 本機正常」。
+##
 ## 所有狀態圖統一整理成 180 px 高，所以 Player 的 BASE_SPRITE_SCALE 直接適用。
 ## 裝備、走路與變身圖都是獨立 sprite；碰撞箱仍然只由 Player 控制。
 
@@ -23,21 +28,21 @@ const DEFAULT_INDEX := 0
 
 const _NAMES := ["紅牛", "綠恐龍", "橘壁虎"]
 const _TEXTURES := [
-	"res://assets/characters/red_bull_adventure.png",
-	"res://assets/characters/dino_adventure.png",
-	"res://assets/characters/gecko_adventure.png",
+	preload("res://assets/characters/red_bull_adventure.png"),
+	preload("res://assets/characters/dino_adventure.png"),
+	preload("res://assets/characters/gecko_adventure.png"),
 ]
 
 const _WALK_TEXTURES := [
-	"res://assets/characters/red_bull_walk.png",
-	"res://assets/characters/dino_walk.png",
-	"res://assets/characters/gecko_walk.png",
+	preload("res://assets/characters/red_bull_walk.png"),
+	preload("res://assets/characters/dino_walk.png"),
+	preload("res://assets/characters/gecko_walk.png"),
 ]
 
 const _BIG_TEXTURES := [
-	"res://assets/characters/red_bull_big.png",
-	"res://assets/characters/dino_big.png",
-	"res://assets/characters/gecko_big.png",
+	preload("res://assets/characters/red_bull_big.png"),
+	preload("res://assets/characters/dino_big.png"),
+	preload("res://assets/characters/gecko_big.png"),
 ]
 
 
@@ -80,16 +85,30 @@ static func name_of(index: int) -> String:
 	return _NAMES[clamp_index(index)]
 
 
-static func texture_path(index: int) -> String:
+## 貼圖資源本身。正式流程一律用這三個，不要再走路徑字串。
+static func texture(index: int) -> Texture2D:
 	return _TEXTURES[clamp_index(index)]
 
 
-static func walk_texture_path(index: int) -> String:
+static func walk_texture(index: int) -> Texture2D:
 	return _WALK_TEXTURES[clamp_index(index)]
 
 
-static func big_texture_path(index: int) -> String:
+static func big_texture(index: int) -> Texture2D:
 	return _BIG_TEXTURES[clamp_index(index)]
+
+
+## 路徑查詢留給測試對照用。preload 進來的資源仍然帶著 resource_path。
+static func texture_path(index: int) -> String:
+	return _TEXTURES[clamp_index(index)].resource_path
+
+
+static func walk_texture_path(index: int) -> String:
+	return _WALK_TEXTURES[clamp_index(index)].resource_path
+
+
+static func big_texture_path(index: int) -> String:
+	return _BIG_TEXTURES[clamp_index(index)].resource_path
 
 
 ## 往前或往後選一隻，走到頭會繞回另一端。

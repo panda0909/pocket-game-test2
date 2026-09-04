@@ -1,25 +1,13 @@
+class_name Main
 extends Node2D
 
 ## 遊戲流程總控。所有狀態改變都在這裡發生——子節點只發訊號，不改別人的狀態。
 
-const TILE := 64
+const TILE := TileGlossary.SIZE
 const MAIN_LEVEL := "res://levels/level1.txt"
-const POWERUP_SCENE := preload("res://scenes/powerup.tscn")
-const COIN_TEXTURE := preload("res://assets/coin.png")
-const COIN_SHOT_SCENE := preload("res://scenes/coin_shot.tscn")
-const BOSS_SHOT_SCENE := preload("res://scenes/boss_shot.tscn")
-
-## 頂出來的金幣飛多高、飛多久。飛完就消失，不必玩家再去撿——
-## 他已經頂到了，再讓他追一顆金幣只是多餘的操作。
-const COIN_POP_HEIGHT := 96.0
-const COIN_POP_TIME := 0.45
-## 死亡後畫面停頓多久才重生。
+## 死亡後畫面停頓多久才重生。表演本身在 Player.play_death()，
+## 這裡只管停多久。
 const DEATH_PAUSE := 0.9
-## 得分浮字。程式建立的 Label 用內建字型會變成方塊，所以自己指定。
-const POPUP_FONT := "res://assets/fonts/NotoSansTC-Bold.otf"
-const POPUP_FONT_SIZE := 26
-const SCORE_POP_HEIGHT := 76.0
-const SCORE_POP_TIME := 0.7
 ## 剩幾秒開始警告。與 HUD 的變色門檻同一個來源。
 const HURRY_SECONDS := HUD.HURRY_SECONDS
 
@@ -46,6 +34,7 @@ var _level_broken := false
 
 @onready var _tiles: TileMapLayer = $Tiles
 @onready var _entities: Node2D = $Entities
+@onready var _effects: Effects = $Effects
 @onready var _player: Player = $Player
 @onready var _hud: HUD = $HUD
 @onready var _select: CharacterSelect = $CharacterSelect
@@ -143,78 +132,17 @@ func _on_boss_defeated() -> void:
 
 
 func _on_boss_projectile(origin: Vector2, direction: Vector2) -> void:
-	var shot := BOSS_SHOT_SCENE.instantiate()
-	shot.position = origin
-	_entities.add_child(shot)
-	shot.launch(direction)
+	_effects.boss_projectile(origin, direction)
 
 
-func _on_block_popped_coin(position: Vector2) -> void:
+func _on_block_popped_coin(world_position: Vector2) -> void:
 	stats.add_coin()
-	_spawn_coin_pop(position)
+	_effects.coin_pop(world_position)
 
 
-## 牛奶該落在哪一列，用關卡資料算——關卡是純資料，「底下第一格實心地面
-## 在哪」本來就該問資料，在場景裡打射線只會先打到磚塊自己。
+## 牛奶的落點由關卡資料決定，實際生成交給 Effects。
 func _on_block_popped_milk(cell: Vector2i) -> void:
-	var milk := POWERUP_SCENE.instantiate()
-	milk.position = LevelBuilder.cell_center(cell) + Vector2(0, -TILE * 0.4)
-	_entities.add_child(milk)
-	milk.drop_to(_ground_surface_below(cell), _drift_direction(cell))
-
-
-## 往下找第一格實心地面的表面 y。整欄都沒有地面（磚塊架在坑上）時，
-## 就落在關卡底部，玩家看得到它掉下去。
-func _ground_surface_below(cell: Vector2i) -> float:
-	for row in range(cell.y + 1, _map.height):
-		if TileGlossary.is_solid(_map.terrain_at(Vector2i(cell.x, row))):
-			return float(row * TILE)
-	return float(_map.height * TILE)
-
-
-## 往哪邊滑。右邊有實心的就往左，兩邊都有就往右——差在觀感，
-## 落點高度已經由 _ground_surface_below 保證是站得到的地面。
-func _drift_direction(cell: Vector2i) -> int:
-	if TileGlossary.is_solid(_map.terrain_at(Vector2i(cell.x + 1, cell.y))) \
-			and not TileGlossary.is_solid(
-				_map.terrain_at(Vector2i(cell.x - 1, cell.y))):
-		return -1
-	return 1
-
-
-## 得分浮字。整個計分系統是為了分享成績而存在，但玩家在遊玩中得不到
-## 「這個動作值 200 分」的即時知識，也就無從發展刷分策略——踩刺球值最多分
-## 這件事幾乎不可能被發現。
-func _spawn_score_popup(world_position: Vector2, amount: int) -> void:
-	if amount <= 0:
-		return
-	var label := Label.new()
-	label.text = "+%d" % amount
-	label.add_theme_font_override("font", load(POPUP_FONT))
-	label.add_theme_font_size_override("font_size", POPUP_FONT_SIZE)
-	label.add_theme_color_override("font_outline_color", Color(0.08, 0.1, 0.14))
-	label.add_theme_constant_override("outline_size", 8)
-	label.position = world_position
-	label.z_index = 10
-	_entities.add_child(label)
-	var tween := label.create_tween().set_parallel()
-	tween.tween_property(label, "position:y",
-		world_position.y - SCORE_POP_HEIGHT, SCORE_POP_TIME) \
-		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	tween.tween_property(label, "modulate:a", 0.0, SCORE_POP_TIME)
-	tween.chain().tween_callback(label.queue_free)
-
-
-func _spawn_coin_pop(position: Vector2) -> void:
-	var sprite := Sprite2D.new()
-	sprite.texture = COIN_TEXTURE
-	sprite.position = position
-	_entities.add_child(sprite)
-	var tween := sprite.create_tween().set_parallel()
-	tween.tween_property(sprite, "position:y", position.y - COIN_POP_HEIGHT,
-		COIN_POP_TIME).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	tween.tween_property(sprite, "modulate:a", 0.0, COIN_POP_TIME)
-	tween.chain().tween_callback(sprite.queue_free)
+	_effects.drop_milk(cell, _map)
 
 
 func _connect_player() -> void:
@@ -232,12 +160,12 @@ func _connect_player() -> void:
 
 func _on_coin_collected() -> void:
 	stats.add_coin()
-	_spawn_score_popup(_player.global_position + Vector2(0, -80),
+	_effects.score_popup(_player.global_position + Vector2(0, -80),
 		RunStats.COIN_SCORE)
 
 
 func _on_goal_reached() -> void:
-	_advance("goal")
+	_advance(Flow.GOAL)
 
 
 ## 進水管。暗房是另一張關卡檔，整張換掉；分數與計時延續。
@@ -301,10 +229,7 @@ func _on_throw_requested(direction: int, origin: Vector2) -> void:
 	if not ThrowRules.fire(_player.state, stats):
 		return
 	Audio.play("throw")
-	var shot := COIN_SHOT_SCENE.instantiate()
-	shot.position = origin
-	_entities.add_child(shot)
-	shot.launch(direction)
+	var shot := _effects.coin_shot(origin, direction)
 	shot.hit_enemy.connect(_on_enemy_stomped)
 	shot.hit_boss.connect(_on_boss_shot)
 
@@ -316,16 +241,16 @@ func _on_boss_shot() -> void:
 
 
 func _on_milk_collected() -> void:
-	if _player.grow() == "bonus":
+	if _player.grow() == PlayerState.BONUS:
 		stats.add_milk_bonus()
-		_spawn_score_popup(_player.global_position + Vector2(0, -110),
+		_effects.score_popup(_player.global_position + Vector2(0, -110),
 			RunStats.MILK_BONUS_SCORE)
 
 
 func _on_enemy_stomped(kind: int) -> void:
 	var amount := EnemyRules.score(kind)
 	stats.add_score(amount)
-	_spawn_score_popup(_player.global_position + Vector2(0, -80), amount)
+	_effects.score_popup(_player.global_position + Vector2(0, -80), amount)
 
 
 func _on_hazard_touched() -> void:
@@ -364,7 +289,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not event.is_action_pressed("jump"):
 		return
 	if flow_state == Flow.TITLE and not _level_broken:
-		_advance("start")
+		_advance(Flow.START)
 
 
 func _on_resumed() -> void:
@@ -373,7 +298,7 @@ func _on_resumed() -> void:
 
 
 func _on_quit_to_title() -> void:
-	_advance("restart") if flow_state != Flow.PLAYING else _enter_state(Flow.TITLE)
+	_advance(Flow.RESTART) if flow_state != Flow.PLAYING else _enter_state(Flow.TITLE)
 
 
 func _on_select_moved(direction: int) -> void:
@@ -383,11 +308,11 @@ func _on_select_moved(direction: int) -> void:
 
 func _on_select_confirmed() -> void:
 	_player.set_character(character_index)
-	_advance("confirm")
+	_advance(Flow.CONFIRM)
 
 
 func _on_select_cancelled() -> void:
-	_advance("back")
+	_advance(Flow.BACK)
 
 
 ## 結束畫面的四個動作。分享失敗時明說，不假裝成功——
@@ -412,7 +337,7 @@ func _on_end_menu_chosen(action: String) -> void:
 			else:
 				_end_menu.show_note("複製失敗，請手動選取下面這段文字：%s" % message)
 		"again":
-			_advance("restart")
+			_advance(Flow.RESTART)
 
 
 func _process(delta: float) -> void:
@@ -429,7 +354,7 @@ func _process(delta: float) -> void:
 
 func _advance(event: String) -> void:
 	var next := Flow.next(flow_state, event, stats.lives)
-	if next == flow_state and event != "died":
+	if next == flow_state and event != Flow.DIED:
 		return
 	_enter_state(next, event)
 
@@ -463,7 +388,7 @@ func _enter_state(state: int, event := "") -> void:
 		Flow.PLAYING:
 			_hud.hide_message()
 			Audio.play_music()
-			if event == "died":
+			if event == Flow.DIED:
 				_respawn()
 		Flow.GAME_OVER:
 			Audio.stop_music()
@@ -532,10 +457,10 @@ func _kill_player() -> void:
 	_hud.hide_message()
 	_death_pending = false
 	# 這 0.9 秒裡屍體還帶著慣性，可能滑進旗竿而進入 CLEARED。
-	# 這時再送一次 "died" 會讓結束畫面重跑一遍，游標與提示文字被洗掉。
+	# 這時再送一次 DIED 會讓結束畫面重跑一遍，游標與提示文字被洗掉。
 	if not Flow.counts_down(flow_state):
 		return
-	_advance("died")
+	_advance(Flow.DIED)
 
 
 # --- 開發工具用（tools/capture.gd）---
@@ -545,7 +470,7 @@ func begin_game_to_select() -> void:
 	if _level_broken:
 		return
 	if flow_state == Flow.TITLE:
-		_advance("start")
+		_advance(Flow.START)
 
 
 func begin_game(index := -1) -> void:
@@ -554,7 +479,7 @@ func begin_game(index := -1) -> void:
 	if index >= 0:
 		character_index = Roster.clamp_index(index)
 	if flow_state == Flow.TITLE:
-		_advance("start")
+		_advance(Flow.START)
 	if flow_state == Flow.SELECT:
 		_on_select_confirmed()
 

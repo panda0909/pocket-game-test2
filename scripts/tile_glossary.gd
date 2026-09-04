@@ -1,6 +1,14 @@
 class_name TileGlossary
 extends RefCounted
 
+## 一格幾像素。全專案的唯一出處。
+##
+## 以前這個 64 被複製了五份（main.gd、level_builder.gd、question_block.gd、
+## moving_platform.gd、pipe.tscn），而 main.gd 自己還同時用著兩套來源——
+## 有幾行是自己的 TILE、有一行是 LevelBuilder.TILE。改成 32px 圖磚時要記得
+## 改五個地方，漏一個不會有編譯錯誤，只會有一段對不齊的關卡。
+const SIZE := 64
+
 ## 關卡文字檔裡「一個字元」的語意，是全專案唯一的真相來源。
 ##
 ## 為什麼要獨立成一個類別：關卡解析器、關卡建構器、磚塊規則、素材圖集切割

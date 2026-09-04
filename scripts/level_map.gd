@@ -64,6 +64,30 @@ func terrain_at(cell: Vector2i) -> int:
 	return row[cell.x]
 
 
+## 往下找第一格實心地面的列號。整欄都沒有地面（磚塊架在坑上）時回關卡
+## 底部，玩家至少看得到東西掉下去。
+##
+## 這段和 drift_direction 原本寫在 main.gd 上——是純資料運算卻掛在 Node2D
+## 上，於是完全進不了單元測試，牛奶掉錯格只能靠跑整個場景才發現。
+func ground_surface_row_below(cell: Vector2i) -> int:
+	for row in range(cell.y + 1, height):
+		if TileGlossary.is_solid(terrain_at(Vector2i(cell.x, row))):
+			return row
+	return height
+
+
+## 頂出來的東西往哪邊滑。右邊有實心而左邊沒有就往左，其餘往右——
+## 差別只在觀感，落點高度已經由 ground_surface_row_below 保證站得到。
+func drift_direction(cell: Vector2i) -> int:
+	var right_blocked := TileGlossary.is_solid(
+		terrain_at(Vector2i(cell.x + 1, cell.y)))
+	var left_blocked := TileGlossary.is_solid(
+		terrain_at(Vector2i(cell.x - 1, cell.y)))
+	if right_blocked and not left_blocked:
+		return -1
+	return 1
+
+
 ## 關卡的像素尺寸，供相機夾邊界用。
 func pixel_size(tile: int) -> Vector2:
 	return Vector2(width * tile, height * tile)

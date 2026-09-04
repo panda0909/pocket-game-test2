@@ -1,6 +1,14 @@
 class_name PlayerState
 extends RefCounted
 
+## take_hit 與 collect_milk 的結果。以前是字串字面值，呼叫端拼錯一個字
+## 不會有任何錯誤——player.gd 的死亡判定就綁在一次字串比較上。
+const DIED := "died"
+const SHRANK := "shrank"
+const IGNORED := "ignored"
+const GREW := "grew"
+const BONUS := "bonus"
+
 ## 玩家的體型與無敵狀態。純邏輯，狀態轉移表的每一格都有測試。
 ##
 ## 為什麼要有「變大」這一層：它讓關卡設計多了一個節奏工具。放牛奶磚的位置
@@ -45,20 +53,20 @@ func advance(delta: float) -> void:
 ## 回 "died" / "shrank" / "ignored"。
 func take_hit() -> String:
 	if is_invincible():
-		return "ignored"
+		return IGNORED
 	if is_big():
 		size = SMALL
 		invincible_left = INVINCIBLE_TIME
-		return "shrank"
-	return "died"
+		return SHRANK
+	return DIED
 
 
 ## 回 "grew" / "bonus"。
 func collect_milk() -> String:
 	if is_big():
-		return "bonus"
+		return BONUS
 	size = BIG
-	return "grew"
+	return GREW
 
 
 func reset() -> void:

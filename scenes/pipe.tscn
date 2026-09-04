@@ -14,7 +14,7 @@ script/source = "extends StaticBody2D
 ## 偵測用 Area2D 而不是碰撞判定：玩家站在管口上時腳底剛好在碰撞面上，
 ## 用碰撞去問「有沒有站在水管上」會時有時無。
 
-const TILE := 64
+const TILE := TileGlossary.SIZE
 
 var target := \"\"
 
@@ -24,7 +24,7 @@ func setup(pipe_target: String) -> void:
 func _ready() -> void:
 	add_to_group(\"pipe\")
 	var atlas := AtlasTexture.new()
-	atlas.atlas = load(\"res://assets/tiles.png\")
+	atlas.atlas = LevelBuilder.TILES_TEXTURE
 	atlas.region = Rect2(TileGlossary.PIPE_ATLAS_COLUMN * TILE, 0, TILE, TILE)
 	$Sprite.texture = atlas
 	$Mouth.body_entered.connect(_on_body_entered)

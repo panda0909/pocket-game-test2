@@ -9,7 +9,7 @@ extends StaticBody2D
 signal popped_coin(position: Vector2)
 signal popped_milk(cell: Vector2i)
 
-const TILE := 64
+const TILE := TileGlossary.SIZE
 const BUMP_HEIGHT := 12.0
 const BUMP_TIME := 0.09
 
@@ -82,6 +82,6 @@ func _break() -> void:
 
 func _apply_column(column: int) -> void:
 	var atlas := AtlasTexture.new()
-	atlas.atlas = load("res://assets/tiles.png")
+	atlas.atlas = LevelBuilder.TILES_TEXTURE
 	atlas.region = Rect2(column * TILE, 0, TILE, TILE)
 	_sprite.texture = atlas

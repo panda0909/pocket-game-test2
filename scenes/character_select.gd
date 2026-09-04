@@ -37,7 +37,7 @@ func _build_slots() -> void:
 	_slots.clear()
 	for i in Roster.COUNT:
 		var slot := TextureRect.new()
-		slot.texture = load(Roster.texture_path(i))
+		slot.texture = Roster.texture(i)
 		slot.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		slot.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		slot.custom_minimum_size = Vector2(200, 260)

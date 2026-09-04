@@ -6,8 +6,6 @@ extends CharacterBody2D
 ## 原點在腳底（和玩家一致），所以放到「格子底邊中央」就剛好站在地上，
 ## 建構器不必為每種敵人記不同的偏移。
 
-signal died(kind: int)
-
 const DEATH_TIME := 0.22
 
 ## 各種敵人的碰撞箱與半高。半高是踩踏判定要用的，所以和貼圖尺寸綁在一起。
@@ -53,7 +51,7 @@ func _ready() -> void:
 	(_shape.shape as RectangleShape2D).size = size
 	_shape.position.y = -half_height
 
-	_sprite.texture = load(EnemyRules.texture_path(kind))
+	_sprite.texture = EnemyRules.texture(kind)
 	_sprite.position.y = -half_height
 
 	_apply_ray_direction()
@@ -140,7 +138,6 @@ func die() -> void:
 	set_deferred("collision_layer", 0)
 	set_deferred("collision_mask", 0)
 	velocity = Vector2.ZERO
-	died.emit(kind)
 
 	var tween := create_tween().set_parallel()
 	tween.tween_property(_sprite, "scale:y", 0.15, DEATH_TIME)
