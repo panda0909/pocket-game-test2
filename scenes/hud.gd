@@ -9,6 +9,8 @@ extends CanvasLayer
 @onready var _lives: Label = $Top/Lives
 @onready var _time: Label = $Top/Time
 @onready var _dim: ColorRect = $Dim
+@onready var _boss_row: VBoxContainer = $Boss
+@onready var _boss_bar: ProgressBar = $Boss/BossBar
 @onready var _message: VBoxContainer = $Message
 @onready var _title: Label = $Message/Title
 @onready var _subtitle: Label = $Message/Subtitle
@@ -62,6 +64,23 @@ func reset_cache() -> void:
 ## 「分數 000000　時間 300」只是雜訊，選角畫面還會和角色圖疊在一起。
 func set_stats_visible(visible_now: bool) -> void:
 	_stats_row.visible = visible_now
+
+
+## Boss 血條。玩家原本完全看不出自己打了幾下、還要打幾下——金幣路線要
+## 六發，每發之間還有 0.8 秒無敵，而「打中了沒傷害」與「打中了有傷害」
+## 在畫面上長得一模一樣。玩家會誤以為金幣打不動 Boss 而放棄那條路線，
+## 但那正是設計的核心。
+func set_boss_health(ratio: float) -> void:
+	_boss_row.visible = true
+	_boss_bar.value = clampf(ratio, 0.0, 1.0)
+
+
+func hide_boss_health() -> void:
+	_boss_row.visible = false
+
+
+func _ready() -> void:
+	_boss_row.visible = false
 
 
 func show_message(title: String, subtitle: String) -> void:

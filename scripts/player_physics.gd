@@ -44,18 +44,22 @@ static func step(velocity: Vector2, input: Dictionary, on_floor: bool,
 	var jump_held: bool = input.get("jump_held", false)
 	# 舊的呼叫沒有這個鍵，預設當走路——現有測試因此不必全部改。
 	var sprint: bool = input.get("sprint", false)
+	# 角色修飾值。沒帶就用基準常數，所以只有 Player 需要傳，
+	# 純物理的測試仍然可以只給方向與跳躍。
+	var sprint_speed: float = input.get("sprint_speed", SPRINT_SPEED)
+	var coyote_time: float = input.get("coyote_time", COYOTE_TIME)
 
 	var coyote: float = timers.get("coyote", 0.0)
 	var buffer: float = timers.get("buffer", 0.0)
 
-	coyote = COYOTE_TIME if on_floor else coyote - delta
+	coyote = coyote_time if on_floor else coyote - delta
 	buffer = JUMP_BUFFER if jump_pressed else buffer - delta
 
 	var new_velocity := velocity
 
 	if not is_zero_approx(dir):
 		var accel := GROUND_ACCEL if on_floor else AIR_ACCEL
-		var top_speed := SPRINT_SPEED if sprint else MAX_RUN_SPEED
+		var top_speed := sprint_speed if sprint else MAX_RUN_SPEED
 		# 放開衝刺時 move_toward 會用同一組加速度把速度收回走路上限，
 		# 所以鬆手是自然減速，不是瞬間掉一截。
 		new_velocity.x = move_toward(new_velocity.x, dir * top_speed, accel * delta)

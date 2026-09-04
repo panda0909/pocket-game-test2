@@ -15,6 +15,11 @@ const COIN_POP_HEIGHT := 96.0
 const COIN_POP_TIME := 0.45
 ## 死亡後畫面停頓多久才重生。
 const DEATH_PAUSE := 0.9
+## 得分浮字。程式建立的 Label 用內建字型會變成方塊，所以自己指定。
+const POPUP_FONT := "res://assets/fonts/NotoSansTC-Bold.otf"
+const POPUP_FONT_SIZE := 26
+const SCORE_POP_HEIGHT := 76.0
+const SCORE_POP_TIME := 0.7
 ## 剩幾秒開始警告。與 HUD 的變色門檻同一個來源。
 const HURRY_SECONDS := HUD.HURRY_SECONDS
 
@@ -81,6 +86,8 @@ func _load_level(path: String, spawn_override := Vector2.INF,
 	# 分數與計時活在 Main，不隨關卡重建——進暗房不該把時間洗掉。
 	if not keep_stats:
 		stats = RunStats.new(_map.time_limit)
+		# 角色的初始金幣。走 add_coin 會連分數一起加，所以直接設欄位。
+		stats.coins = int(Roster.traits(character_index)["start_coins"])
 	# 暗房沒有 S，關卡起點沿用主關卡的，回來時才找得到路。
 	if not _map.is_room:
 		_spawn = result["spawn_position"]
@@ -109,9 +116,13 @@ func _connect_level_nodes() -> void:
 		elif node.is_in_group("boss"):
 			node.defeated.connect(_on_boss_defeated)
 			node.spawned_projectile.connect(_on_boss_projectile)
+			node.health_changed.connect(_hud.set_boss_health)
+			node.hit_absorbed.connect(_on_boss_hit_absorbed)
 
 	# Boss 還活著時旗竿不能碰。不然玩家可以直接繞過關底衝終點。
 	_set_goal_active(get_tree().get_nodes_in_group("boss").is_empty())
+	if get_tree().get_nodes_in_group("boss").is_empty():
+		_hud.hide_boss_health()
 
 
 func _set_goal_active(active: bool) -> void:
@@ -119,8 +130,14 @@ func _set_goal_active(active: bool) -> void:
 		node.set_active(active)
 
 
+## 打中了但在無敵幀內。玩家原本完全分不出這和真的扣血的差別。
+func _on_boss_hit_absorbed() -> void:
+	Audio.play("bump")
+
+
 func _on_boss_defeated() -> void:
 	Audio.play("boss_down")
+	_hud.hide_boss_health()
 	stats.add_score(BossRules.SCORE)
 	_set_goal_active(true)
 
@@ -165,6 +182,29 @@ func _drift_direction(cell: Vector2i) -> int:
 	return 1
 
 
+## 得分浮字。整個計分系統是為了分享成績而存在，但玩家在遊玩中得不到
+## 「這個動作值 200 分」的即時知識，也就無從發展刷分策略——踩刺球值最多分
+## 這件事幾乎不可能被發現。
+func _spawn_score_popup(world_position: Vector2, amount: int) -> void:
+	if amount <= 0:
+		return
+	var label := Label.new()
+	label.text = "+%d" % amount
+	label.add_theme_font_override("font", load(POPUP_FONT))
+	label.add_theme_font_size_override("font_size", POPUP_FONT_SIZE)
+	label.add_theme_color_override("font_outline_color", Color(0.08, 0.1, 0.14))
+	label.add_theme_constant_override("outline_size", 8)
+	label.position = world_position
+	label.z_index = 10
+	_entities.add_child(label)
+	var tween := label.create_tween().set_parallel()
+	tween.tween_property(label, "position:y",
+		world_position.y - SCORE_POP_HEIGHT, SCORE_POP_TIME) \
+		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tween.tween_property(label, "modulate:a", 0.0, SCORE_POP_TIME)
+	tween.chain().tween_callback(label.queue_free)
+
+
 func _spawn_coin_pop(position: Vector2) -> void:
 	var sprite := Sprite2D.new()
 	sprite.texture = COIN_TEXTURE
@@ -192,6 +232,8 @@ func _connect_player() -> void:
 
 func _on_coin_collected() -> void:
 	stats.add_coin()
+	_spawn_score_popup(_player.global_position + Vector2(0, -80),
+		RunStats.COIN_SCORE)
 
 
 func _on_goal_reached() -> void:
@@ -276,10 +318,14 @@ func _on_boss_shot() -> void:
 func _on_milk_collected() -> void:
 	if _player.grow() == "bonus":
 		stats.add_milk_bonus()
+		_spawn_score_popup(_player.global_position + Vector2(0, -110),
+			RunStats.MILK_BONUS_SCORE)
 
 
 func _on_enemy_stomped(kind: int) -> void:
-	stats.add_score(EnemyRules.score(kind))
+	var amount := EnemyRules.score(kind)
+	stats.add_score(amount)
+	_spawn_score_popup(_player.global_position + Vector2(0, -80), amount)
 
 
 func _on_hazard_touched() -> void:
@@ -478,9 +524,12 @@ func _kill_player() -> void:
 		return
 	_death_pending = true
 	Audio.play("death")
-	_player.control_enabled = false
 	stats.lose_life()
+	_player.play_death()
+	_hud.show_message("", "剩餘 %d 條命" % stats.lives if stats.lives > 0 else "沒有命了")
 	await get_tree().create_timer(DEATH_PAUSE).timeout
+	_player.revive()
+	_hud.hide_message()
 	_death_pending = false
 	# 這 0.9 秒裡屍體還帶著慣性，可能滑進旗竿而進入 CLEARED。
 	# 這時再送一次 "died" 會讓結束畫面重跑一遍，游標與提示文字被洗掉。

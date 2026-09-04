@@ -199,3 +199,33 @@ func test_facing_never_returns_zero_for_tiny_speeds() -> void:
 	for speed in [0.5, 0.1, 0.001, -0.5, -0.999]:
 		var f := PlayerPhysics.facing_from_velocity(speed, 1)
 		assert_ne(f, 0, "速度 %s 不該讓面向變成 0" % speed)
+
+
+# --- 角色修飾值 ---
+# step() 的 input 多兩個可選鍵。沒帶就用基準常數，舊的呼叫不必全部改。
+
+func test_sprint_speed_can_be_overridden() -> void:
+	var input := _sprint(1.0)
+	input["sprint_speed"] = 600.0
+	var v := Vector2.ZERO
+	var t := _timers(PlayerPhysics.COYOTE_TIME)
+	for i in 240:
+		var r := PlayerPhysics.step(v, input, true, D, t)
+		v = r["velocity"]
+		t = r["timers"]
+	assert_almost_eq(v.x, 600.0, 1.0)
+
+func test_sprint_speed_defaults_to_the_baseline() -> void:
+	assert_almost_eq(_run_until_stable(_sprint(1.0)),
+		PlayerPhysics.SPRINT_SPEED, 1.0)
+
+func test_coyote_time_can_be_overridden() -> void:
+	# 離開地面之後還能跳多久
+	var input := _ipt(0.0)
+	input["coyote_time"] = 0.5
+	var r := PlayerPhysics.step(Vector2.ZERO, input, true, D, _timers())
+	assert_almost_eq(float(r["timers"]["coyote"]), 0.5, 0.001)
+
+func test_coyote_time_defaults_to_the_baseline() -> void:
+	var r := PlayerPhysics.step(Vector2.ZERO, _ipt(0.0), true, D, _timers())
+	assert_almost_eq(float(r["timers"]["coyote"]), PlayerPhysics.COYOTE_TIME, 0.001)

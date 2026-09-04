@@ -28,6 +28,17 @@ const CAMERA_LOOKAHEAD := 120.0
 ## 接觸框比身體往下多伸出的距離，讓腳底剛碰到敵人的那一幀就偵測得到。
 const TOUCH_FOOT_MARGIN := 8.0
 ## 衝刺時的前傾角度與收放速度（弧度）。
+## 死亡時往上拋多高、轉多少、掉多深。
+## 場景檔裡的碰撞層與遮罩。死亡表演會暫時關掉，復原時要放回這兩個值。
+const PHYSICS_LAYER := 64
+const PHYSICS_MASK := 1
+
+const DEATH_TOSS_HEIGHT := 220.0
+const DEATH_TOSS_TIME := 0.22
+const DEATH_FALL_TIME := 0.42
+const DEATH_SPIN := 2.4
+const DEATH_FALL_HEIGHT := 900.0
+
 const SPRINT_LEAN := 0.09
 const LEAN_SPEED := 0.7
 
@@ -55,6 +66,8 @@ var _standing_pipe := ""
 ## 緊接著的物理步裡 Input.is_action_just_pressed("jump") 仍然為真——
 ## 玩家一開場就會無故跳一下。
 var _input_grace_frames := 0
+var _traits := Roster.traits(Roster.DEFAULT_INDEX)
+var _death_tween: Tween = null
 var _active_texture_path := ""
 
 @onready var _sprite: Sprite2D = $Sprite
@@ -68,6 +81,7 @@ var _active_texture_path := ""
 ## 這就是「純換皮」的全部內容，也是關卡幾何驗收不必重跑三遍的原因。
 func set_character(index: int) -> void:
 	character_index = Roster.clamp_index(index)
+	_traits = Roster.traits(character_index)
 	if _sprite != null:
 		_refresh_sprite_texture(false)
 
@@ -125,11 +139,17 @@ func _physics_process(delta: float) -> void:
 
 func _read_input() -> Dictionary:
 	if not accepts_input():
-		return {"dir": 0.0, "jump_pressed": false, "jump_held": false, "sprint": false}
+		return {
+			"dir": 0.0, "jump_pressed": false, "jump_held": false, "sprint": false,
+			"sprint_speed": _traits["sprint_speed"],
+			"coyote_time": _traits["coyote_time"],
+		}
 	return {
 		"dir": Input.get_axis("move_left", "move_right"),
 		"jump_pressed": Input.is_action_just_pressed("jump"),
 		"jump_held": Input.is_action_pressed("jump"),
+		"sprint_speed": _traits["sprint_speed"],
+		"coyote_time": _traits["coyote_time"],
 		# 衝刺與丟金幣是兩個獨立的 action。以前 sprint 直接讀 throw，
 		# 大牛每次起衝都會丟掉一枚金幣，而金幣是有限彈藥（Boss 要六發）——
 		# 習慣按住 Shift 跑的玩家會在抵達關底前把彈藥灑光。
@@ -157,6 +177,42 @@ func take_hit() -> String:
 	elif outcome == "died":
 		died.emit()
 	return outcome
+
+
+## 死亡表演。以前死亡只是原地凍住 0.9 秒然後瞬移——沒有任何一幀告訴
+## 玩家「你死了」，那段靜止很容易被誤讀成遊戲卡住。
+##
+## 關掉碰撞讓屍體直接穿過地板掉出畫面，是這類遊戲的慣例做法：
+## 玩家看得到自己掉下去，死因與結果都清楚。
+func play_death() -> void:
+	control_enabled = false
+	velocity = Vector2.ZERO
+	set_deferred("collision_layer", 0)
+	set_deferred("collision_mask", 0)
+	set_physics_process(false)
+	var top := position.y - DEATH_TOSS_HEIGHT
+	_death_tween = create_tween()
+	# 拋起、翻轉、墜落三段合計必須短於 Main 的 DEATH_PAUSE。超過的話重生
+	# 之後 tween 還在寫 position，會把玩家再推回關卡外——那正是「一次死亡
+	# 扣光三條命」的成因。revive() 另外會 kill 它，時間再怎麼調都不會重演。
+	_death_tween.tween_property(self, "position:y", top, DEATH_TOSS_TIME) \
+		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	_death_tween.parallel().tween_property(_sprite, "rotation", DEATH_SPIN,
+		DEATH_TOSS_TIME + DEATH_FALL_TIME)
+	_death_tween.tween_property(self, "position:y", top + DEATH_FALL_HEIGHT,
+		DEATH_FALL_TIME).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+
+
+## 死亡表演之後把節點復原，重生才不會是一具旋轉的屍體。
+func revive() -> void:
+	# tween 一定要先停。它還活著的話會在重生之後繼續寫 position。
+	if _death_tween != null and _death_tween.is_valid():
+		_death_tween.kill()
+	_death_tween = null
+	set_physics_process(true)
+	set_deferred("collision_layer", PHYSICS_LAYER)
+	set_deferred("collision_mask", PHYSICS_MASK)
+	_sprite.rotation = 0.0
 
 
 func grow() -> String:

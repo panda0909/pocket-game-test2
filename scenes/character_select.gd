@@ -50,7 +50,10 @@ func _build_slots() -> void:
 
 func show_index(index: int) -> void:
 	_index = Roster.clamp_index(index)
-	_name_label.text = "◀　%s　▶" % Roster.name_of(_index)
+	# 名字底下寫一句這隻的特色。三隻有了各自的手感差異之後，
+	# 選角才是一個真的決策而不是純造型。
+	_name_label.text = "◀　%s　▶\n%s" % [
+		Roster.name_of(_index), Roster.traits(_index)["blurb"]]
 	for i in _slots.size():
 		var slot := _slots[i]
 		var chosen := i == _index

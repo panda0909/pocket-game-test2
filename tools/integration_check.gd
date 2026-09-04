@@ -389,17 +389,19 @@ func _check_pressing_throw_key_fires_a_coin() -> void:
 	for i in 6:
 		main.stats.add_coin()
 	var before: int = main.stats.coins
-	await _tap(KEY_J)
+	# 輪詢式的輸入用 action 壓，不用實體按鍵事件——按鍵綁定本身
+	# 由 test_input_map.gd 驗證，這裡要驗的是「丟金幣那條路接得起來」。
+	await _tap_action("throw")
 	await get_tree().physics_frame
-	_expect(main.stats.coins == before - 1, "按 J 丟出一枚金幣",
+	_expect(main.stats.coins == before - 1, "按丟金幣鍵射出一枚金幣",
 		"%d -> %d" % [before, main.stats.coins])
 
 	# 彈藥空了不該扣成負數
 	while main.stats.coins > 0:
 		main.stats.spend_coin()
-	await _tap(KEY_J)
+	await _tap_action("throw")
 	await get_tree().physics_frame
-	_expect(main.stats.coins == 0, "彈藥空了按 J 不會扣成負數",
+	_expect(main.stats.coins == 0, "彈藥空了再按不會扣成負數",
 		"coins=%d" % main.stats.coins)
 	main.queue_free()
 	await get_tree().process_frame

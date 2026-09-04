@@ -7,11 +7,15 @@ extends CharacterBody2D
 ## 但壓迫感來自體型、皇冠與會反擊，不是來自畫風突然變了。
 
 signal defeated
-signal touched_player
+signal health_changed(ratio: float)
 signal spawned_projectile(position: Vector2, direction: Vector2)
+## 打中了但在無敵幀內。玩家最需要分辨的就是這個和真的扣血的差別。
+signal hit_absorbed
 
 ## 移動、投擲與體型的數值全部在 BossRules，這裡只負責演出。
 const BODY_SIZE := BossRules.BODY_SIZE
+const INVINCIBLE_TINT := Color(1.35, 1.35, 1.45)
+const DAMAGED_TINT := Color(2.4, 1.2, 1.2)
 
 var hp := float(BossRules.MAX_HP)
 var half_height := BODY_SIZE.y * 0.5
@@ -36,6 +40,7 @@ func _ready() -> void:
 	(_shape.shape as RectangleShape2D).size = BODY_SIZE
 	_shape.position.y = -half_height
 	_sprite.position.y = -half_height
+	health_changed.emit(BossRules.health_ratio(hp))
 
 
 func is_alive() -> bool:
@@ -47,7 +52,8 @@ func _physics_process(delta: float) -> void:
 		return
 
 	_invincible_left = maxf(0.0, _invincible_left - delta)
-	_sprite.modulate = Color(2, 2, 2) if _invincible_left > 0.0 else Color(1, 1, 1)
+	# 無敵期間偏灰、剛扣血時偏白，兩種命中的回饋不再長得一樣。
+	_sprite.modulate = INVINCIBLE_TINT if _invincible_left > 0.0 else Color(1, 1, 1)
 
 	velocity.y = minf(velocity.y + BossRules.GRAVITY * delta,
 		EnemyRules.TERMINAL_FALL)
@@ -82,10 +88,17 @@ func take_shot() -> bool:
 
 
 func _damage(new_hp: float) -> bool:
-	if not _alive or _invincible_left > 0.0:
+	if not _alive:
+		return false
+	if _invincible_left > 0.0:
+		# 打中了但沒吃到傷害。以前這裡和真的扣血一樣只有白閃，玩家分不出來，
+		# 於是會在無敵幀內連丟三枚金幣卻毫無效果，然後放棄金幣路線。
+		hit_absorbed.emit()
 		return false
 	hp = new_hp
+	health_changed.emit(BossRules.health_ratio(hp))
 	_invincible_left = BossRules.HIT_INVINCIBLE_TIME
+	_sprite.modulate = DAMAGED_TINT
 	var tween := create_tween()
 	tween.tween_property(_sprite, "scale:y", _sprite.scale.y * 0.8, 0.08)
 	tween.tween_property(_sprite, "scale:y", _sprite.scale.y, 0.14)
