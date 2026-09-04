@@ -8,6 +8,9 @@ extends Node
 ## 讓腳本自己 quit()，不加 --quit-after，避免中途卡住時被強制結束
 ## 而誤判為通過。
 
+## 至少要跑到這麼多項檢查。加新檢查時把它調高。
+const MIN_CHECKS := 95
+
 var _passed := 0
 var _failed := 0
 
@@ -54,6 +57,12 @@ func _ready() -> void:
 	await _check_finishing_a_run_records_the_score()
 
 	print("---")
+	# 檢查總數也要守。單看「失敗 0」看不出有沒有檢查憑空消失——
+	# 某個 _check_* 因為找不到目標而提早 return 的話，總結行仍然是漂亮的
+	# 「通過 N　失敗 0」，只是 N 悄悄變小了。
+	if _passed + _failed < MIN_CHECKS:
+		_fail("只跑了 %d 項檢查，少於預期的 %d 項——有檢查沒被執行到"
+			% [_passed + _failed, MIN_CHECKS])
 	print("通過 %d　失敗 %d" % [_passed, _failed])
 	get_tree().quit(1 if _failed > 0 else 0)
 
@@ -294,7 +303,12 @@ func _check_side_contact_hurts_instead() -> void:
 	var player: Player = main.get_node("Player")
 	var target := _first_stompable(main)
 	if target == null:
+		# 明確失敗，不要靜默 return。以前這裡直接 return，不計失敗也不計通過——
+		# 只要有人改關卡拿掉可踩敵人，這條檢查就人間蒸發，而總結行
+		# 「通過 N　失敗 0」看起來一切正常，因為 N 變小了沒有人在看。
+		_fail("關卡裡有可踩的敵人（側面接觸測試）")
 		main.queue_free()
+		await get_tree().process_frame
 		return
 
 	player.grow()
@@ -537,14 +551,47 @@ func _check_player_lands() -> void:
 	await get_tree().process_frame
 
 
+## 踩踏回彈要真的把玩家推上去，而且按住跳鍵要彈得更高。
+##
+## 舊的斷言是 is_equal_approx(player.velocity.y, PlayerPhysics.stomp_velocity(false))
+## ——左右兩邊是同一個運算式，只驗證了「賦值敘述有執行」，任何行為都測不到。
+## 真正值得驗的是連踩爬高那條路：apply_stomp 的參數是從
+## Input.is_action_pressed("jump") 傳進來的，接錯了就再也踩不高。
 func _check_stomp_bounce() -> void:
+	var plain := await _measure_stomp_rise(false)
+	var held := await _measure_stomp_rise(true)
+	_expect(plain > 40.0, "踩踏會把玩家往上推", "只升高 %.0f px" % plain)
+	_expect(held > plain * 1.15, "按住跳鍵踩踏會彈得明顯更高",
+		"不按 %.0f px、按住 %.0f px" % [plain, held])
+
+
+## 量測一次踩踏回彈能升多高。
+func _measure_stomp_rise(hold_jump: bool) -> float:
 	var main := await _make_main()
+	main.begin_game()
 	var player: Player = main.get_node("Player")
-	player.apply_stomp(false)
-	_expect(is_equal_approx(player.velocity.y, PlayerPhysics.stomp_velocity(false)),
-		"踩踏給出設計值的回彈", "velocity.y=%.1f" % player.velocity.y)
+	for i in 60:
+		await get_tree().physics_frame
+		if player.is_on_floor():
+			break
+	var start_y := player.global_position.y
+	# 跳鍵要真的按住，不能只把 true 傳進 apply_stomp。PlayerPhysics 的
+	# jump-cut 會在下一個物理幀把「沒按住」的上升速度砍到 JUMP_CUT_VELOCITY，
+	# 所以不按住的話兩種初速最後會爬到一樣高——連踩爬高靠的是持續按住。
+	if hold_jump:
+		Input.action_press("jump")
+	player.apply_stomp(hold_jump)
+	var highest := start_y
+	for i in 90:
+		await get_tree().physics_frame
+		highest = minf(highest, player.global_position.y)
+		if player.is_on_floor() and player.global_position.y >= start_y - 1.0:
+			break
+	if hold_jump:
+		Input.action_release("jump")
 	main.queue_free()
 	await get_tree().process_frame
+	return start_y - highest
 
 
 func _check_camera_bounds() -> void:
