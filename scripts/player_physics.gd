@@ -117,5 +117,22 @@ static func jump_distance(horizontal_speed: float) -> float:
 	return horizontal_speed * (rise_time + fall_time)
 
 
+## 建 step() 的 input。用具名參數而不是讓每個呼叫端自己拼字串鍵——
+## 鍵名打錯的話 step() 只會靜靜地用預設值，表現成「這個角色的衝刺沒生效」
+## 而不是任何錯誤。player_physics.gd:46 的註解「舊的呼叫沒有這個鍵」正好
+## 說明這個契約已經悄悄演化過，而沒有任何東西擋得住下一次。
+static func new_input(dir: float, jump_pressed: bool, jump_held: bool,
+		sprint: bool, sprint_speed := SPRINT_SPEED,
+		coyote_time := COYOTE_TIME) -> Dictionary:
+	return {
+		"dir": dir,
+		"jump_pressed": jump_pressed,
+		"jump_held": jump_held,
+		"sprint": sprint,
+		"sprint_speed": sprint_speed,
+		"coyote_time": coyote_time,
+	}
+
+
 static func new_timers() -> Dictionary:
 	return {"coyote": 0.0, "buffer": 0.0}

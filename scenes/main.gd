@@ -79,13 +79,13 @@ func _load_level(path: String, spawn_override := Vector2.INF,
 		stats.coins = int(Roster.traits(character_index)["start_coins"])
 	# 暗房沒有 S，關卡起點沿用主關卡的，回來時才找得到路。
 	if not _map.is_room:
-		_spawn = result["spawn_position"]
-	var start: Vector2 = spawn_override if spawn_override.is_finite() \
-		else result["spawn_position"]
+		_spawn = result.spawn_position
+	var start := spawn_override if spawn_override.is_finite() \
+		else result.spawn_position
 	# 換場不是重生：保留變身狀態，不然按 ↓ 的瞬間大牛就變回小牛。
 	_player.enter_level(start)
 	_player.set_character(character_index)
-	_player.set_camera_bounds(result["level_size"])
+	_player.set_camera_bounds(result.level_size)
 	_connect_level_nodes()
 	return true
 
@@ -148,9 +148,8 @@ func _on_block_popped_milk(cell: Vector2i) -> void:
 func _connect_player() -> void:
 	_player.coin_collected.connect(_on_coin_collected)
 	_player.goal_reached.connect(_on_goal_reached)
-	_player.hazard_touched.connect(_on_hazard_touched)
 	_player.enemy_stomped.connect(_on_enemy_stomped)
-	_player.enemy_touched.connect(_on_hazard_touched)
+	_player.damaged.connect(_on_damaged)
 	_player.died.connect(_on_player_died)
 	_player.milk_collected.connect(_on_milk_collected)
 	_player.throw_requested.connect(_on_throw_requested)
@@ -214,12 +213,17 @@ func _return_to_level() -> void:
 	_return_position = Vector2.INF
 
 
-func _on_checkpoint_reached(position: Vector2) -> void:
+## 檢查點的識別靠節點本身，不是座標。
+##
+## 以前是拿 Vector2 做精確相等比對去找是哪一支旗子——只因為那個值是從
+## area.global_position 原封不動傳回來的才成立。任何一天在中途做了座標
+## 換算或加了偏移，旗子就再也不會變色，而且不會有任何錯誤訊息。
+func _on_checkpoint_reached(world_position: Vector2) -> void:
 	if _in_room:
 		return
-	_checkpoint = position
-	for node in _entities.get_children():
-		if node.is_in_group("checkpoint") and node.global_position == position:
+	_checkpoint = world_position
+	for node in get_tree().get_nodes_in_group("checkpoint"):
+		if is_ancestor_of(node) and node.global_position.is_equal_approx(world_position):
 			node.mark_taken()
 
 
@@ -253,7 +257,7 @@ func _on_enemy_stomped(kind: int) -> void:
 	_effects.score_popup(_player.global_position + Vector2(0, -80), amount)
 
 
-func _on_hazard_touched() -> void:
+func _on_damaged() -> void:
 	_player.take_hit()
 
 

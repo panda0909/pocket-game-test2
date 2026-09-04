@@ -9,13 +9,9 @@ const SPEED := 80.0
 const TRAVEL_H := 4
 const TRAVEL_V := 3
 
-var vertical := false
+@export var vertical := false
 
 var _origin := Vector2.ZERO
-
-
-func setup(is_vertical: bool) -> void:
-	vertical = is_vertical
 
 
 func _ready() -> void:

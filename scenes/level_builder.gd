@@ -83,7 +83,7 @@ static func build_tileset() -> TileSet:
 
 ## 建構整張關卡。回傳 Main 需要知道的資訊。
 static func build(map: LevelMap, tile_layer: TileMapLayer,
-		entity_root: Node2D) -> Dictionary:
+		entity_root: Node2D) -> BuildResult:
 	tile_layer.clear()
 	if tile_layer.tile_set == null:
 		tile_layer.tile_set = build_tileset()
@@ -101,7 +101,8 @@ static func build(map: LevelMap, tile_layer: TileMapLayer,
 			var kind := map.terrain_at(cell)
 			if BlockRules.needs_node(kind):
 				var block := BLOCK_SCENE.instantiate()
-				block.setup(kind)
+				block.kind = kind
+				block.cell = cell
 				block.position = cell_center(cell)
 				entity_root.add_child(block)
 				built += 1
@@ -123,11 +124,7 @@ static func build(map: LevelMap, tile_layer: TileMapLayer,
 		entity_root.add_child(node)
 		built += 1
 
-	return {
-		"spawn_position": cell_bottom(map.spawn),
-		"level_size": map.pixel_size(TILE),
-		"entities_built": built,
-	}
+	return BuildResult.make(cell_bottom(map.spawn), map.pixel_size(TILE), built)
 
 
 static func _make_hazard(cell: Vector2i) -> Area2D:
@@ -163,19 +160,20 @@ static func _make_entity(entity: Dictionary, despawn_y := INF) -> Node2D:
 			return goal
 		"bear", "spikeball", "arrow":
 			var enemy := ENEMY_SCENE.instantiate()
-			enemy.setup(EnemyRules.kind_from_type(type), despawn_y)
+			enemy.kind = EnemyRules.kind_from_type(type)
+			enemy.despawn_y = despawn_y
 			# 刺球與箭頭懸空，站在格子中央；小熊站在格子底邊。
 			enemy.position = cell_bottom(cell) if type == "bear" \
 				else cell_center(cell)
 			return enemy
 		"platform_h", "platform_v":
 			var platform := PLATFORM_SCENE.instantiate()
-			platform.setup(type == "platform_v")
+			platform.vertical = type == "platform_v"
 			platform.position = cell_center(cell)
 			return platform
 		"pipe":
 			var pipe := PIPE_SCENE.instantiate()
-			pipe.setup(str(entity["params"].get("target", "")))
+			pipe.target = str(entity["params"].get("target", ""))
 			pipe.position = cell_center(cell)
 			return pipe
 		"checkpoint":

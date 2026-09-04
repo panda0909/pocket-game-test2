@@ -9,13 +9,15 @@ extends CharacterBody2D
 
 signal died
 signal enemy_stomped(kind: int)
-signal enemy_touched
+## 碰到會傷人的東西：敵人或地刺。以前是 enemy_touched 與 hazard_touched
+## 兩個訊號，Main 兩個都接到同一個處理器、行為從頭到尾一模一樣——
+## 多出來的那個只讓讀的人以為 Main 對兩者有不同處理。
+signal damaged
 signal coin_collected
 signal milk_collected
 signal goal_reached
-signal hazard_touched
 signal throw_requested(direction: int, origin: Vector2)
-signal checkpoint_reached(position: Vector2)
+signal checkpoint_reached(world_position: Vector2)
 signal pipe_entered(target: String)
 
 ## 紅牛原圖 131×180，縮到小牛高 128 px（兩格）。
@@ -139,23 +141,19 @@ func _physics_process(delta: float) -> void:
 
 func _read_input() -> Dictionary:
 	if not accepts_input():
-		return {
-			"dir": 0.0, "jump_pressed": false, "jump_held": false, "sprint": false,
-			"sprint_speed": _traits["sprint_speed"],
-			"coyote_time": _traits["coyote_time"],
-		}
-	return {
-		"dir": Input.get_axis("move_left", "move_right"),
-		"jump_pressed": Input.is_action_just_pressed("jump"),
-		"jump_held": Input.is_action_pressed("jump"),
-		"sprint_speed": _traits["sprint_speed"],
-		"coyote_time": _traits["coyote_time"],
-		# 衝刺與丟金幣是兩個獨立的 action。以前 sprint 直接讀 throw，
-		# 大牛每次起衝都會丟掉一枚金幣，而金幣是有限彈藥（Boss 要六發）——
-		# 習慣按住 Shift 跑的玩家會在抵達關底前把彈藥灑光。
-		# 衝刺不需要變大，不然小牛全程只能慢走。
-		"sprint": Input.is_action_pressed("sprint"),
-	}
+		return PlayerPhysics.new_input(0.0, false, false, false,
+			_traits["sprint_speed"], _traits["coyote_time"])
+	# 衝刺與丟金幣是兩個獨立的 action。以前 sprint 直接讀 throw，大牛每次
+	# 起衝都會丟掉一枚金幣，而金幣是有限彈藥（Boss 要六發）——習慣按住
+	# Shift 跑的玩家會在抵達關底前把彈藥灑光。
+	# 衝刺不需要變大，不然小牛全程只能慢走。
+	return PlayerPhysics.new_input(
+		Input.get_axis("move_left", "move_right"),
+		Input.is_action_just_pressed("jump"),
+		Input.is_action_pressed("jump"),
+		Input.is_action_pressed("sprint"),
+		_traits["sprint_speed"],
+		_traits["coyote_time"])
 
 
 ## 踩到敵人後的回彈。由 Main 或敵人呼叫，帶入「跳鍵是否按住」——
@@ -166,7 +164,10 @@ func apply_stomp(jump_held: bool) -> void:
 	Audio.play("stomp")
 
 
-## 受傷。回傳 PlayerState 的結果字串，讓 Main 決定是扣命還是只變小。
+## 受傷。變小在這裡處理完，死亡則另外發 died 訊號讓 Main 走死亡流程。
+##
+## 回傳值只給測試與除錯看——Main 不讀它。以前註解寫「讓 Main 決定是扣命
+## 還是只變小」，但 Main 從來沒有讀過這個回傳值，兩者不符已經很久了。
 func take_hit() -> String:
 	var outcome := state.take_hit()
 	if outcome == PlayerState.SHRANK:
@@ -389,7 +390,7 @@ func _resolve_enemy_contacts() -> void:
 			or EnemyRules.is_stompable(body.kind)
 		if not (stompable
 				and EnemyRules.is_stomp(velocity.y, _previous_feet_y, enemy_top)):
-			enemy_touched.emit()
+			damaged.emit()
 			return
 
 		apply_stomp(Input.is_action_pressed("jump"))
@@ -414,7 +415,7 @@ func _on_area_entered(area: Area2D) -> void:
 	elif area.is_in_group("goal"):
 		goal_reached.emit()
 	elif area.is_in_group("hazard"):
-		hazard_touched.emit()
+		damaged.emit()
 	elif area.is_in_group("checkpoint"):
 		Audio.play("checkpoint")
 		checkpoint_reached.emit(area.global_position)

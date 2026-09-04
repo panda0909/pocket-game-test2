@@ -15,7 +15,14 @@ const _BODY := {
 	EnemyRules.KIND_ARROW: Vector2(40, 44),
 }
 
-var kind := EnemyRules.KIND_BEAR
+## 用 @export 而不是自製的 setup()：賦值時機完全一樣（instantiate 之後、
+## 進樹之前），但 @export 額外換來編輯器面板可調、.tscn 存得了預設值、
+## 型別受檢。以前那套 setup() 只是把 @export 手工重寫一遍，代價是每個
+## 生成點都要記得呼叫，忘了不會有任何警告。
+@export var kind := EnemyRules.KIND_BEAR
+## 掉到這個 y 以下就釋放。預設 INF 代表不自動釋放。
+@export var despawn_y := INF
+
 var half_height := 25.0
 
 var _direction := -1
@@ -23,19 +30,11 @@ var _alive := true
 var _diving := false
 var _home_y := 0.0
 var _float_phase := 0.0
-var _despawn_y := INF
 
 @onready var _sprite: Sprite2D = $Sprite
 @onready var _shape: CollisionShape2D = $Shape
 @onready var _wall_ray: RayCast2D = $WallRay
 @onready var _floor_ray: RayCast2D = $FloorRay
-
-
-## 建構器在 add_child 之前呼叫。@onready 還沒跑，所以只記參數，
-## 真正套用留給 _ready。
-func setup(enemy_kind: int, despawn_y := INF) -> void:
-	kind = enemy_kind
-	_despawn_y = despawn_y
 
 
 func is_alive() -> bool:
@@ -63,7 +62,7 @@ func _physics_process(delta: float) -> void:
 
 	# 掉出關卡下緣就收掉。少了這個，被打碎磚台的敵人會永遠下墜，
 	# 節點不釋放、_physics_process 也一直在跑。
-	if global_position.y > _despawn_y:
+	if global_position.y > despawn_y:
 		queue_free()
 		return
 

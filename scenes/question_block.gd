@@ -6,28 +6,24 @@ extends StaticBody2D
 ## 為什麼這三種不進 TileMapLayer：它們各自要記住「被頂過了沒」，還要能單獨
 ## 播動畫、單獨消失。圖磚沒有狀態，節點才有。
 
-signal popped_coin(position: Vector2)
+signal popped_coin(world_position: Vector2)
 signal popped_milk(cell: Vector2i)
 
 const TILE := TileGlossary.SIZE
 const BUMP_HEIGHT := 12.0
 const BUMP_TIME := 0.09
 
-var kind := TileGlossary.KIND_QUESTION
+@export var kind := TileGlossary.KIND_QUESTION
+## 自己在關卡格線上的位置。建構器本來就知道，所以直接存起來——
+## 以前是從像素座標反推回來的，而那個反推有兩個隱患：用的是 local
+## position（只因為 Entities 剛好在原點才等價，加個關卡震動就全錯），
+## 而整數除法對負座標是往零截斷不是往下取整。
+@export var cell := Vector2i.ZERO
 
 var _used := false
 var _home_y := 0.0
 
 @onready var _sprite: Sprite2D = $Sprite
-
-
-func setup(block_kind: int) -> void:
-	kind = block_kind
-
-
-## 自己在關卡格線上的位置。原點在格子中心，所以直接整除即可。
-func cell() -> Vector2i:
-	return Vector2i(int(position.x) / TILE, int(position.y) / TILE)
 
 
 func _ready() -> void:
@@ -48,7 +44,7 @@ func hit_from_below(player_is_big: bool) -> String:
 		"milk":
 			_used = true
 			_apply_column(BlockRules.spent_column(kind))
-			popped_milk.emit(cell())
+			popped_milk.emit(cell)
 			_bump()
 		"broke":
 			_break()

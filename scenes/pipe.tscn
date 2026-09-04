@@ -16,10 +16,7 @@ script/source = "extends StaticBody2D
 
 const TILE := TileGlossary.SIZE
 
-var target := \"\"
-
-func setup(pipe_target: String) -> void:
-	target = pipe_target
+@export var target := \"\"
 
 func _ready() -> void:
 	add_to_group(\"pipe\")

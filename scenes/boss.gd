@@ -8,7 +8,7 @@ extends CharacterBody2D
 
 signal defeated
 signal health_changed(ratio: float)
-signal spawned_projectile(position: Vector2, direction: Vector2)
+signal spawned_projectile(origin: Vector2, direction: Vector2)
 ## 打中了但在無敵幀內。玩家最需要分辨的就是這個和真的扣血的差別。
 signal hit_absorbed
 
