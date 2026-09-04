@@ -15,6 +15,8 @@ const COIN_POP_HEIGHT := 96.0
 const COIN_POP_TIME := 0.45
 ## 死亡後畫面停頓多久才重生。
 const DEATH_PAUSE := 0.9
+## 剩幾秒開始警告。與 HUD 的變色門檻同一個來源。
+const HURRY_SECONDS := HUD.HURRY_SECONDS
 
 var stats := RunStats.new()
 var flow_state := Flow.TITLE
@@ -113,6 +115,7 @@ func _set_goal_active(active: bool) -> void:
 
 
 func _on_boss_defeated() -> void:
+	Audio.play("boss_down")
 	stats.add_score(BossRules.SCORE)
 	_set_goal_active(true)
 
@@ -250,6 +253,7 @@ func _on_checkpoint_reached(position: Vector2) -> void:
 func _on_throw_requested(direction: int, origin: Vector2) -> void:
 	if not ThrowRules.fire(_player.state, stats):
 		return
+	Audio.play("throw")
 	var shot := COIN_SHOT_SCENE.instantiate()
 	shot.position = origin
 	_entities.add_child(shot)
@@ -258,8 +262,10 @@ func _on_throw_requested(direction: int, origin: Vector2) -> void:
 	shot.hit_boss.connect(_on_boss_shot)
 
 
+## 金幣打中 Boss。以前這裡是個空的 pass——訊號接了卻什麼都不做，
+## 而玩家最需要的正是「這一發有沒有生效」的回饋。
 func _on_boss_shot() -> void:
-	pass
+	Audio.play("boss_hit")
 
 
 func _on_milk_collected() -> void:
@@ -345,8 +351,12 @@ func _on_end_menu_chosen(action: String) -> void:
 func _process(delta: float) -> void:
 	if not Flow.counts_down(flow_state):
 		return
+	var before := stats.seconds_left()
 	if stats.tick(delta):
 		_kill_player()
+	# 跨過警告線的那一秒響一次，不是每幀都響。
+	if before > HURRY_SECONDS and stats.seconds_left() <= HURRY_SECONDS:
+		Audio.play("hurry")
 	_hud.update_stats(stats, _player.state.is_big())
 
 
@@ -368,11 +378,13 @@ func _enter_state(state: int, event := "") -> void:
 	_hud.set_stats_visible(state != Flow.TITLE and state != Flow.SELECT)
 	match state:
 		Flow.TITLE:
+			_hud.reset_cache()
 			_restart_run()
 			if _level_broken:
 				_hud.show_message("關卡載入失敗",
 					"%s 讀不起來，請看主控台的錯誤訊息" % _level_path)
 			else:
+				Audio.stop_music()
 				_hud.show_message("口袋牛牛大冒險",
 					"按空白鍵開始　　方向鍵／WASD 移動　空白鍵跳　Shift 丟金幣　↓ 進水管")
 		Flow.SELECT:
@@ -380,12 +392,14 @@ func _enter_state(state: int, event := "") -> void:
 			_select.show_index(character_index)
 		Flow.PLAYING:
 			_hud.hide_message()
+			Audio.play_music()
 			if event == "died":
 				_respawn()
 		Flow.GAME_OVER:
 			_hud.hide_message()
 			_end_menu.show_result(false, stats.score, stats.coins)
 		Flow.CLEARED:
+			Audio.play("clear")
 			stats.finish()
 			_hud.hide_message()
 			_end_menu.show_result(true, stats.score, stats.coins)
@@ -416,6 +430,7 @@ func _kill_player() -> void:
 	if _death_pending or not Flow.counts_down(flow_state):
 		return
 	_death_pending = true
+	Audio.play("death")
 	_player.control_enabled = false
 	stats.lose_life()
 	await get_tree().create_timer(DEATH_PAUSE).timeout

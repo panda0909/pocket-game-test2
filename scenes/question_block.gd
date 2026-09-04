@@ -60,6 +60,7 @@ func hit_from_below(player_is_big: bool) -> String:
 ## 頂一下往上跳再回位。這個小動作是「我頂到了」的唯一回饋，
 ## 沒有它玩家會分不清是頂到了還是撞到牆。
 func _bump() -> void:
+	Audio.play("bump")
 	var tween := create_tween()
 	tween.tween_property(self, "position:y", _home_y - BUMP_HEIGHT, BUMP_TIME)
 	tween.tween_property(self, "position:y", _home_y, BUMP_TIME * 1.6) \
@@ -67,6 +68,7 @@ func _bump() -> void:
 
 
 func _break() -> void:
+	Audio.play("brick_break")
 	# 只能延後改。_break 是在玩家的碰撞回呼裡被同步呼叫的，直接賦值會被
 	# 「Function blocked during in/out signal」擋掉——底下那行直接賦值是
 	# 舊寫法的殘留，正是會出問題的那一行。

@@ -69,6 +69,7 @@ func handle_action(event: InputEvent) -> void:
 	elif event.is_action_pressed("move_right"):
 		_move(1)
 	elif event.is_action_pressed("jump"):
+		Audio.play("menu_confirm")
 		chosen.emit(ACTIONS[_index])
 
 
@@ -86,6 +87,7 @@ func current_note() -> String:
 
 
 func _move(step: int) -> void:
+	Audio.play("menu_move")
 	_index = posmod(_index + step, ACTIONS.size())
 	_refresh()
 
@@ -93,6 +95,7 @@ func _move(step: int) -> void:
 func _on_button_pressed(index: int) -> void:
 	_index = index
 	_refresh()
+	Audio.play("menu_confirm")
 	chosen.emit(ACTIONS[_index])
 
 

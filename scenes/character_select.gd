@@ -65,10 +65,14 @@ func show_index(index: int) -> void:
 ## 這樣它在其他流程狀態下不會偷吃按鍵。
 func handle_action(event: InputEvent) -> void:
 	if event.is_action_pressed("move_left"):
+		Audio.play("menu_move")
 		moved.emit(-1)
 	elif event.is_action_pressed("move_right"):
+		Audio.play("menu_move")
 		moved.emit(1)
 	elif event.is_action_pressed("jump"):
+		Audio.play("menu_confirm")
 		confirmed.emit()
 	elif event.is_action_pressed("duck"):
+		Audio.play("menu_move")
 		cancelled.emit()

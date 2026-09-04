@@ -14,15 +14,48 @@ extends CanvasLayer
 @onready var _subtitle: Label = $Message/Subtitle
 
 
+## 剩幾秒開始警告。Main 的警告音也用這個值，兩邊不會各寫一個 30。
+const HURRY_SECONDS := 30
+
+const NORMAL_COLOR := Color(1, 1, 1)
+const HURRY_COLOR := Color(1, 0.45, 0.4)
+
+## 上一幀的值。update_stats 是每幀被呼叫的，但四個數字裡只有時間會每秒
+## 變一次——分數與金幣一整場可能都不變。不比對就等於每秒做 240 次
+## 字串格式化與配置，在 Web 版的單執行緒環境是白繳的。
+var _last_score := -1
+var _last_coins := -1
+var _last_lives := -1
+var _last_seconds := -1
+var _last_big := false
+
+
 func update_stats(stats: RunStats, is_big: bool) -> void:
-	_score.text = "分數 %06d" % stats.score
-	# 金幣同時是彈藥，大牛時標上彈匣符號提醒它可以丟
-	_coins.text = "%s %d" % ["金幣◆" if is_big else "金幣", stats.coins]
-	_lives.text = "生命 %d" % stats.lives
-	_time.text = "時間 %03d" % stats.seconds_left()
-	# 剩不到 30 秒轉紅，這是玩家唯一會注意到時間的時刻
-	_time.modulate = Color(1, 0.45, 0.4) if stats.seconds_left() <= 30 \
-		else Color(1, 1, 1)
+	if stats.score != _last_score:
+		_last_score = stats.score
+		_score.text = "分數 %06d" % stats.score
+	if stats.coins != _last_coins or is_big != _last_big:
+		_last_coins = stats.coins
+		_last_big = is_big
+		# 金幣同時是彈藥，大牛時標上彈匣符號提醒它可以丟
+		_coins.text = "%s %d" % ["金幣◆" if is_big else "金幣", stats.coins]
+	if stats.lives != _last_lives:
+		_last_lives = stats.lives
+		_lives.text = "生命 %d" % stats.lives
+	var seconds := stats.seconds_left()
+	if seconds != _last_seconds:
+		_last_seconds = seconds
+		_time.text = "時間 %03d" % seconds
+		# 剩不到 30 秒轉紅，這是玩家唯一會注意到時間的時刻
+		_time.modulate = HURRY_COLOR if seconds <= HURRY_SECONDS else NORMAL_COLOR
+
+
+## 換一局要把快取清掉，不然新的一局數字剛好一樣時 Label 不會更新。
+func reset_cache() -> void:
+	_last_score = -1
+	_last_coins = -1
+	_last_lives = -1
+	_last_seconds = -1
 
 
 ## 上方那排數值只在真的在玩的時候有意義。標題與選角畫面顯示

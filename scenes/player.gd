@@ -98,6 +98,7 @@ func _physics_process(delta: float) -> void:
 
 	if result["jumped"]:
 		_punch_scale(Vector2(0.82, 1.22), 0.15)
+		Audio.play("jump")
 
 	move_and_slide()
 	_previous_feet_y = previous_feet_y
@@ -116,6 +117,7 @@ func _physics_process(delta: float) -> void:
 
 	if accepts_input() and Input.is_action_just_pressed("duck") \
 			and not _standing_pipe.is_empty():
+		Audio.play("pipe")
 		pipe_entered.emit(_standing_pipe)
 
 	_input_grace_frames = maxi(0, _input_grace_frames - 1)
@@ -139,12 +141,14 @@ func _read_input() -> Dictionary:
 func apply_stomp(jump_held: bool) -> void:
 	velocity.y = PlayerPhysics.stomp_velocity(jump_held)
 	_punch_scale(Vector2(1.3, 0.7), 0.2)
+	Audio.play("stomp")
 
 
 ## 受傷。回傳 PlayerState 的結果字串，讓 Main 決定是扣命還是只變小。
 func take_hit() -> String:
 	var outcome := state.take_hit()
 	if outcome == "shrank":
+		Audio.play("hurt")
 		_apply_size()
 		_refresh_sprite_texture(false)
 		_punch_scale(Vector2(1.35, 0.65), 0.25)
@@ -156,6 +160,7 @@ func take_hit() -> String:
 func grow() -> String:
 	var outcome := state.collect_milk()
 	if outcome == "grew":
+		Audio.play("powerup")
 		_apply_size()
 		_refresh_sprite_texture(false)
 		_punch_scale(Vector2(0.7, 1.35), 0.28)
@@ -343,6 +348,7 @@ func _resolve_enemy_contacts() -> void:
 func _on_area_entered(area: Area2D) -> void:
 	if area.is_in_group("coin"):
 		area.queue_free()
+		Audio.play("coin")
 		coin_collected.emit()
 	elif area.is_in_group("powerup"):
 		area.queue_free()
@@ -352,4 +358,5 @@ func _on_area_entered(area: Area2D) -> void:
 	elif area.is_in_group("hazard"):
 		hazard_touched.emit()
 	elif area.is_in_group("checkpoint"):
+		Audio.play("checkpoint")
 		checkpoint_reached.emit(area.global_position)
