@@ -85,6 +85,10 @@ static func name_of(index: int) -> String:
 	return _NAMES[clamp_index(index)]
 
 
+static func flip_h(index: int) -> bool:
+	return clamp_index(index) == 2
+
+
 ## 貼圖資源本身。正式流程一律用這三個，不要再走路徑字串。
 static func texture(index: int) -> Texture2D:
 	return _TEXTURES[clamp_index(index)]

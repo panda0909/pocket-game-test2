@@ -360,6 +360,7 @@ func _refresh_sprite_texture(walking: bool) -> void:
 	if _sprite == null:
 		return
 	var texture := Roster.texture(character_index)
+	_sprite.flip_h = Roster.flip_h(character_index)
 	if walking:
 		texture = Roster.walk_texture(character_index)
 	elif state.is_big():

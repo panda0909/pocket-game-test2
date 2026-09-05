@@ -52,6 +52,7 @@ func render_png(stats: RunStats, character_index: int, cleared: bool,
 func _apply(fields: Dictionary) -> void:
 	_headline.text = fields["headline"]
 	_subline.text = fields["character"]
+	_character.flip_h = Roster.flip_h(fields["character_index"])
 	_score.text = "%d" % fields["score"]
 	_character.texture = Roster.big_texture(fields["character_index"]) \
 		if fields["cleared"] else Roster.texture(fields["character_index"])
