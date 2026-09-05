@@ -30,6 +30,8 @@ var _last_coins := -1
 var _last_lives := -1
 var _last_seconds := -1
 var _last_big := false
+var _boss_present := false
+var _stats_visible := false
 
 
 func update_stats(stats: RunStats, is_big: bool) -> void:
@@ -63,7 +65,9 @@ func reset_cache() -> void:
 ## 上方那排數值只在真的在玩的時候有意義。標題與選角畫面顯示
 ## 「分數 000000　時間 300」只是雜訊，選角畫面還會和角色圖疊在一起。
 func set_stats_visible(visible_now: bool) -> void:
+	_stats_visible = visible_now
 	_stats_row.visible = visible_now
+	_refresh_boss_row()
 
 
 ## Boss 血條。玩家原本完全看不出自己打了幾下、還要打幾下——金幣路線要
@@ -71,16 +75,28 @@ func set_stats_visible(visible_now: bool) -> void:
 ## 在畫面上長得一模一樣。玩家會誤以為金幣打不動 Boss 而放棄那條路線，
 ## 但那正是設計的核心。
 func set_boss_health(ratio: float) -> void:
-	_boss_row.visible = true
+	_boss_present = true
 	_boss_bar.value = clampf(ratio, 0.0, 1.0)
+	_refresh_boss_row()
 
 
 func hide_boss_health() -> void:
-	_boss_row.visible = false
+	_boss_present = false
+	_refresh_boss_row()
+
+
+## 血條要同時滿足兩個條件才看得見：場上有 Boss，而且現在真的在玩。
+##
+## 關卡在標題狀態就已經建好了（背景要看得到），所以 Boss 也在場上、血條
+## 也被同步過一次——少了後面那個條件，標題畫面上方會掛著一條滿血的
+## 「關底 Boss熊」。
+func _refresh_boss_row() -> void:
+	_boss_row.visible = _boss_present and _stats_visible
 
 
 func _ready() -> void:
 	_boss_row.visible = false
+	_stats_visible = _stats_row.visible
 
 
 func show_message(title: String, subtitle: String) -> void:

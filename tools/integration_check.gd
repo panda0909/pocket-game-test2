@@ -9,7 +9,7 @@ extends Node
 ## 而誤判為通過。
 
 ## 至少要跑到這麼多項檢查。加新檢查時把它調高。
-const MIN_CHECKS := 100
+const MIN_CHECKS := 105
 
 var _passed := 0
 var _failed := 0
@@ -56,6 +56,8 @@ func _ready() -> void:
 	await _check_pause_is_released_on_state_change()
 	await _check_finishing_a_run_records_the_score()
 	await _check_boss_health_bar_shows_up()
+	await _check_boss_health_bar_hidden_outside_gameplay()
+	await _check_clear_time_is_recorded_before_the_bonus()
 
 	print("---")
 	# 檢查總數也要守。單看「失敗 0」看不出有沒有檢查憑空消失——
@@ -1075,5 +1077,47 @@ func _check_boss_health_bar_shows_up() -> void:
 	_expect(hud.get_node("Boss/BossBar").value < 1.0,
 		"打中之後血條真的下降",
 		"value=%.2f" % hud.get_node("Boss/BossBar").value)
+	main.queue_free()
+	await get_tree().process_frame
+
+
+## Boss 血條不該出現在標題與選角畫面上。
+##
+## 關卡在標題狀態就已經建好了（背景要看得到），所以 Boss 也在場上、
+## 血條也被同步了一次。它得跟著上方那排數值一起收起來。
+func _check_boss_health_bar_hidden_outside_gameplay() -> void:
+	var main := await _make_main()
+	var boss_row: Control = main.get_node("HUD/Boss")
+	_expect(main.flow_state == Flow.TITLE, "先確認在標題畫面")
+	_expect(not boss_row.visible, "標題畫面看不到 Boss 血條")
+
+	await _tap(KEY_SPACE)
+	_expect(not boss_row.visible, "選角畫面看不到 Boss 血條")
+
+	await _tap(KEY_SPACE)
+	await get_tree().physics_frame
+	_expect(boss_row.visible, "開始遊戲之後 Boss 血條才出現")
+	main.queue_free()
+	await get_tree().process_frame
+
+
+## 通關記錄的剩餘秒數要是「通關當下」的，不是結算歸零之後的。
+##
+## stats.finish() 會把剩餘時間換成分數並清零，而記錄成績是在那之後——
+## 於是最佳通關時間永遠記成 0 秒，標題畫面顯示「已通關（最佳剩餘 0 秒）」。
+func _check_clear_time_is_recorded_before_the_bonus() -> void:
+	var main := await _make_main()
+	main.begin_game()
+	await get_tree().physics_frame
+	main.save = SaveData.new()
+	var seconds_at_goal: int = main.stats.seconds_left()
+	_expect(seconds_at_goal > 0, "通關前還有剩餘時間",
+		"seconds_left=%d" % seconds_at_goal)
+	main.call("_advance", Flow.GOAL)
+	await get_tree().process_frame
+	_expect(main.save.best_time_left > 0,
+		"通關紀錄留下的是通關當下的剩餘秒數",
+		"記到 %d 秒（通關當下是 %d 秒）"
+			% [main.save.best_time_left, seconds_at_goal])
 	main.queue_free()
 	await get_tree().process_frame

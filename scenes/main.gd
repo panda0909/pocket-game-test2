@@ -406,9 +406,12 @@ func _enter_state(state: int, event := "") -> void:
 		Flow.CLEARED:
 			Audio.stop_music()
 			Audio.play("clear")
+			# 剩餘秒數要在 finish() 把它換成分數並清零之前先拿走，
+			# 不然通關紀錄永遠是 0 秒。
+			var time_at_goal := stats.seconds_left()
 			stats.finish()
 			_hud.hide_message()
-			_record_run(true)
+			_record_run(true, time_at_goal)
 			_end_menu.show_result(true, stats.score, stats.coins)
 	_hud.update_stats(stats, _player.state.is_big())
 
@@ -426,8 +429,8 @@ func _title_subtitle() -> String:
 
 
 ## 把這一局記進最高分紀錄。
-func _record_run(cleared: bool) -> void:
-	if save.record_run(stats.score, stats.coins, cleared, stats.seconds_left()):
+func _record_run(cleared: bool, time_left := 0) -> void:
+	if save.record_run(stats.score, stats.coins, cleared, time_left):
 		_end_menu.show_note("新紀錄！上一個最高分是 %d" % save.best_score)
 	save.save_to_disk()
 
