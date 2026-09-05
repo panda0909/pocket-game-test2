@@ -49,7 +49,7 @@ func _all_string_literals() -> Array:
 	pattern.compile('"((?:[^"\\\\]|\\\\.)*)"')
 	for dir_path in SCAN_DIRS:
 		for path in _files_under(dir_path):
-			var text: String = FileAccess.get_file_as_string(path)
+			var text := _without_comments(FileAccess.get_file_as_string(path))
 			for m in pattern.search_all(text):
 				found.append(m.get_string(1))
 	return found
@@ -70,3 +70,14 @@ func _files_under(path: String) -> Array:
 		name = dir.get_next()
 	dir.list_dir_end()
 	return out
+
+
+## 註解不會出現在畫面上，掃描時要略過——否則寫一段解釋用的中文註解
+## 就會逼字型子集把那些字也收進去，子集會越滾越大而且沒有理由。
+func _without_comments(text: String) -> String:
+	var kept: PackedStringArray = []
+	for line in text.split("\n"):
+		if line.strip_edges().begins_with("#"):
+			continue
+		kept.append(line)
+	return "\n".join(kept)

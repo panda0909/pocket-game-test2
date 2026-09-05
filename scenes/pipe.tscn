@@ -1,4 +1,12 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="FontFile" path="res://assets/fonts/NotoSansTC-Bold.subset.otf" id="font"]
+
+[sub_resource type="LabelSettings" id="prompt_style"]
+font = ExtResource("font")
+font_size = 40
+outline_size = 10
+outline_color = Color(0.08, 0.1, 0.14, 1)
 
 [sub_resource type="RectangleShape2D" id="body_shape"]
 size = Vector2(64, 64)
@@ -18,22 +26,41 @@ const TILE := TileGlossary.SIZE
 
 @export var target := \"\"
 
+## 站上去時管口冒一個閃爍的箭頭。
+##
+## 以前站上去畫面上零變化——只有已經知道答案的人才會按 ↓，於是整個
+## 隱藏房間對第一次玩的人是不存在的。一個提示換一整個房間被看見。
+const PROMPT_BOB := 8.0
+const PROMPT_SPEED := 3.4
+
+var _prompt_phase := 0.0
+
 func _ready() -> void:
 	add_to_group(\"pipe\")
 	var atlas := AtlasTexture.new()
 	atlas.atlas = LevelBuilder.TILES_TEXTURE
 	atlas.region = Rect2(TileGlossary.PIPE_ATLAS_COLUMN * TILE, 0, TILE, TILE)
 	$Sprite.texture = atlas
+	$Prompt.visible = false
 	$Mouth.body_entered.connect(_on_body_entered)
 	$Mouth.body_exited.connect(_on_body_exited)
+
+func _process(delta: float) -> void:
+	if not $Prompt.visible:
+		return
+	_prompt_phase += delta * PROMPT_SPEED
+	$Prompt.position.y = -78.0 + sin(_prompt_phase) * PROMPT_BOB
 
 func _on_body_entered(body: Node2D) -> void:
 	if body.is_in_group(\"player\"):
 		body.set_standing_pipe(target)
+		$Prompt.visible = true
+		_prompt_phase = 0.0
 
 func _on_body_exited(body: Node2D) -> void:
 	if body.is_in_group(\"player\"):
 		body.set_standing_pipe(\"\")
+		$Prompt.visible = false
 "
 
 [node name="Pipe" type="StaticBody2D"]
@@ -53,3 +80,12 @@ collision_mask = 64
 [node name="MouthShape" type="CollisionShape2D" parent="Mouth"]
 position = Vector2(0, -36)
 shape = SubResource("area_shape")
+
+[node name="Prompt" type="Label" parent="."]
+offset_left = -40.0
+offset_top = -78.0
+offset_right = 40.0
+offset_bottom = -22.0
+text = "↓"
+horizontal_alignment = 1
+label_settings = SubResource("prompt_style")

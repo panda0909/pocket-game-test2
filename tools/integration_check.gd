@@ -9,7 +9,7 @@ extends Node
 ## 而誤判為通過。
 
 ## 至少要跑到這麼多項檢查。加新檢查時把它調高。
-const MIN_CHECKS := 105
+const MIN_CHECKS := 118
 
 var _passed := 0
 var _failed := 0
@@ -60,6 +60,9 @@ func _ready() -> void:
 	await _check_clear_time_is_recorded_before_the_bonus()
 	await _check_pipe_does_not_respawn_collected_things()
 	await _check_pipe_does_not_respawn_enemies()
+	await _check_small_player_gets_feedback_when_throwing()
+	await _check_pipe_shows_a_prompt()
+	await _check_goal_reads_as_a_goal()
 
 	print("---")
 	# 檢查總數也要守。單看「失敗 0」看不出有沒有檢查憑空消失——
@@ -1210,3 +1213,79 @@ func _count_in(main: Node, group: String) -> int:
 		if main.is_ancestor_of(node) and not node.is_queued_for_deletion():
 			n += 1
 	return n
+
+
+## 小牛按丟金幣鍵要有回饋，不能靜靜地什麼都不做。
+##
+## 以前條件不成立時連訊號都不發：沒有音效、沒有動畫、數字不動。玩家的
+## 結論是「這個鍵是壞的」，然後就再也沒按過——等他後來真的變大了，
+## 早就放棄了。這不是「沒被發現」，是主動教玩家這個機制不存在。
+func _check_small_player_gets_feedback_when_throwing() -> void:
+	var main := await _make_main()
+	main.begin_game()
+	await get_tree().physics_frame
+	var player: Player = main.get_node("Player")
+	var hud: HUD = main.get_node("HUD")
+	_expect(not player.state.is_big(), "先確認現在是小牛")
+
+	# 用陣列當容器：GDScript 的 lambda 以值捕獲區域變數，
+	# 直接寫 denied = true 只會改到 lambda 自己的複本。
+	var denied := [false]
+	player.throw_denied.connect(func(): denied[0] = true)
+	await _tap_action("throw")
+	await get_tree().physics_frame
+	_expect(denied[0], "小牛按丟金幣會發出 throw_denied")
+	_expect(not hud.get_node("Hint").text.is_empty(),
+		"畫面上有一行說明為什麼丟不出來",
+		"提示是「%s」" % hud.get_node("Hint").text)
+	main.queue_free()
+	await get_tree().process_frame
+
+
+## 站在水管上要看得到「↓」，不然整個隱藏房間對第一次玩的人是不存在的。
+func _check_pipe_shows_a_prompt() -> void:
+	var main := await _make_main()
+	main.begin_game()
+	await get_tree().physics_frame
+	var pipe: Node2D = _first_in_group(main, "pipe")
+	if pipe == null:
+		_fail("主關卡有水管（提示測試）")
+		main.queue_free()
+		await get_tree().process_frame
+		return
+	var prompt: Control = pipe.get_node("Prompt")
+	_expect(not prompt.visible, "還沒站上去時不顯示提示")
+
+	main.get_node("Player").enter_level(pipe.global_position + Vector2(0, -40))
+	for i in 30:
+		await get_tree().physics_frame
+		if prompt.visible:
+			break
+	_expect(prompt.visible, "站上水管會冒出「↓」提示")
+	main.queue_free()
+	await get_tree().process_frame
+
+
+## 終點旗竿要比中途的檢查點顯眼，而且鎖住時要看得出是鎖住而不是畫壞了。
+func _check_goal_reads_as_a_goal() -> void:
+	var main := await _make_main()
+	main.begin_game()
+	await get_tree().physics_frame
+	var goal: Node2D = _first_in_group(main, "goal")
+	var checkpoint: Node2D = _first_in_group(main, "checkpoint")
+	if goal == null or checkpoint == null:
+		_fail("主關卡有旗竿與檢查點（外觀測試）")
+		main.queue_free()
+		await get_tree().process_frame
+		return
+	var goal_sprite: Sprite2D = goal.get_node("Sprite")
+	var cp_sprite: Sprite2D = checkpoint.get_node("Sprite")
+	_expect(goal_sprite.scale.x > cp_sprite.scale.x,
+		"終點旗竿畫得比檢查點大",
+		"終點 %.2f、檢查點 %.2f" % [goal_sprite.scale.x, cp_sprite.scale.x])
+	# Boss 還活著，所以現在是鎖住的
+	_expect(is_equal_approx(goal_sprite.modulate.a, 1.0),
+		"鎖住的終點不是靠變透明表現（透明看起來像沒畫完）",
+		"alpha=%.2f" % goal_sprite.modulate.a)
+	main.queue_free()
+	await get_tree().process_frame

@@ -26,6 +26,7 @@ const _SOUNDS := {
 	"clear": preload("res://assets/audio/clear.wav"),
 	"coin": preload("res://assets/audio/coin.wav"),
 	"death": preload("res://assets/audio/death.wav"),
+	"denied": preload("res://assets/audio/denied.wav"),
 	"hurry": preload("res://assets/audio/hurry.wav"),
 	"hurt": preload("res://assets/audio/hurt.wav"),
 	"jump": preload("res://assets/audio/jump.wav"),

@@ -12,6 +12,7 @@ signal popped_milk(cell: Vector2i)
 const TILE := TileGlossary.SIZE
 const BUMP_HEIGHT := 12.0
 const BUMP_TIME := 0.09
+const DENY_TINT := Color(0.55, 0.55, 0.62)
 
 @export var kind := TileGlossary.KIND_QUESTION
 ## 自己在關卡格線上的位置。建構器本來就知道，所以直接存起來——
@@ -50,7 +51,20 @@ func hit_from_below(player_is_big: bool) -> String:
 			_break()
 		_:
 			_bump()
+			# 可破磚在小牛手上頂不破。以前的表現是「咚一聲抖一下、什麼都沒有」，
+			# 玩家會連撞五次然後認定這塊磚是裝飾或壞掉的。灰一下加一聲「不行」，
+			# 它就從「壞了」變成「我還沒解鎖」。
+			if kind == TileGlossary.KIND_BREAKABLE and not player_is_big:
+				_deny()
 	return outcome
+
+
+## 這塊磚現在還不歸你管。
+func _deny() -> void:
+	Audio.play("denied")
+	var tween := create_tween()
+	tween.tween_property(_sprite, "modulate", DENY_TINT, 0.08)
+	tween.tween_property(_sprite, "modulate", Color(1, 1, 1), 0.28)
 
 
 ## 頂一下往上跳再回位。這個小動作是「我頂到了」的唯一回饋，

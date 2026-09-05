@@ -61,6 +61,11 @@ def scan_characters() -> set:
                 if name.endswith(".txt") and folder == "levels":
                     # 關卡檔的地圖區是字元表，不是給人看的文字
                     text = text.split("---")[0]
+                # 註解不會出現在畫面上。寫一段解釋用的中文註解不該逼子集
+                # 把那些字也收進去——子集會越滾越大而且沒有理由。
+                text = "\n".join(
+                    line for line in text.split("\n")
+                    if not line.lstrip().startswith("#"))
                 for literal in STRING_LITERAL.findall(text):
                     found.update(literal)
     return found

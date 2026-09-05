@@ -22,6 +22,10 @@ const POPUP_FONT_SIZE := 26
 ## 他已經頂到了，再讓他追一顆金幣只是多餘的操作。
 const COIN_POP_HEIGHT := 96.0
 const COIN_POP_TIME := 0.45
+## 加分與扣分要一眼分得出來。
+const GAIN_COLOR := Color(1, 1, 1)
+const LOSS_COLOR := Color(1, 0.55, 0.5)
+
 const SCORE_POP_HEIGHT := 76.0
 const SCORE_POP_TIME := 0.7
 
@@ -43,11 +47,15 @@ func coin_pop(world_position: Vector2) -> void:
 ## 得分浮字。整個計分系統是為了分享成績而存在，但玩家在遊玩中得不到
 ## 「這個動作值 200 分」的即時知識，也就無從發展刷分策略——踩刺球值最多分
 ## 這件事幾乎不可能被發現。
+## 得分浮字。負分也要跳——丟金幣會退還撿到時記的 50 分，那是計分系統的
+## 核心取捨，但以前 amount <= 0 直接 return，玩家完全看不到它發生。
 func score_popup(world_position: Vector2, amount: int) -> void:
-	if amount <= 0:
+	if amount == 0:
 		return
 	var label := Label.new()
-	label.text = "+%d" % amount
+	label.text = ("+%d" % amount) if amount > 0 else ("%d" % amount)
+	label.add_theme_color_override("font_color",
+		GAIN_COLOR if amount > 0 else LOSS_COLOR)
 	label.add_theme_font_override("font", POPUP_FONT)
 	label.add_theme_font_size_override("font_size", POPUP_FONT_SIZE)
 	label.add_theme_color_override("font_outline_color", Color(0.08, 0.1, 0.14))

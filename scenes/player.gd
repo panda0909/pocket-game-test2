@@ -17,6 +17,12 @@ signal coin_collected
 signal milk_collected
 signal goal_reached
 signal throw_requested(direction: int, origin: Vector2)
+## 按了丟金幣但條件不成立（還是小牛）。
+##
+## 以前這個情況連訊號都不發：沒有音效、沒有動畫、數字不動。新手的結論是
+## 「這個鍵是壞的」，然後就再也沒按過——等他後來真的變大了，早就放棄了。
+## 這不是「沒被發現」，是主動教玩家這個機制不存在。
+signal throw_denied
 signal checkpoint_reached(world_position: Vector2)
 signal pipe_entered(target: String)
 
@@ -128,8 +134,12 @@ func _physics_process(delta: float) -> void:
 	state.advance(delta)
 	_update_visual(delta)
 
-	if accepts_input() and Input.is_action_just_pressed("throw") and state.can_throw():
-		throw_requested.emit(_facing, global_position + Vector2(_facing * 34, -70))
+	if accepts_input() and Input.is_action_just_pressed("throw"):
+		if state.can_throw():
+			throw_requested.emit(_facing, global_position + Vector2(_facing * 34, -70))
+		else:
+			_punch_scale(Vector2(1.15, 0.88), 0.16)
+			throw_denied.emit()
 
 	if accepts_input() and Input.is_action_just_pressed("duck") \
 			and not _standing_pipe.is_empty():

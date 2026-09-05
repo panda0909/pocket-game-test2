@@ -11,7 +11,12 @@ extends RefCounted
 ## 分數已經入袋，留著只是佔位，最優解永遠是「撿到就丟」。
 
 const COIN_SCORE := 50
-const MILK_BONUS_SCORE := 1000
+## 第一次喝到漲停牛奶。這是整場最重要的轉折（同時解鎖不會一擊死與攻擊），
+## 以前它給 0 分也沒有任何浮字，而重複拿才給的 1000 分反而是玩家不需要的那次。
+const MILK_FIRST_SCORE := 500
+## 已經是大牛時再拿一塊。零風險的重複收集，不該是全關第二大的單筆收益
+## （僅次於 Boss 的 3000），否則刷分的最優解就是繞回去重拿。
+const MILK_BONUS_SCORE := 200
 const TIME_BONUS_PER_SECOND := 10
 const START_LIVES := 3
 const MAX_LIVES := 9

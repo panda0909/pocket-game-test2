@@ -11,6 +11,7 @@ extends CanvasLayer
 @onready var _dim: ColorRect = $Dim
 @onready var _boss_row: VBoxContainer = $Boss
 @onready var _boss_bar: ProgressBar = $Boss/BossBar
+@onready var _hint: Label = $Hint
 @onready var _message: VBoxContainer = $Message
 @onready var _title: Label = $Message/Title
 @onready var _subtitle: Label = $Message/Subtitle
@@ -18,6 +19,10 @@ extends CanvasLayer
 
 ## 剩幾秒開始警告。Main 的警告音也用這個值，兩邊不會各寫一個 30。
 const HURRY_SECONDS := 30
+
+## 提示停留與淡出。夠久到讀得完一句話，短到不會擋住下一個動作。
+const HINT_HOLD := 1.6
+const HINT_FADE := 0.5
 
 const NORMAL_COLOR := Color(1, 1, 1)
 const HURRY_COLOR := Color(1, 0.45, 0.4)
@@ -32,6 +37,7 @@ var _last_seconds := -1
 var _last_big := false
 var _boss_present := false
 var _stats_visible := false
+var _hint_tween: Tween = null
 
 
 func update_stats(stats: RunStats, is_big: bool) -> void:
@@ -107,7 +113,20 @@ func _refresh_boss_row() -> void:
 
 func _ready() -> void:
 	_boss_row.visible = false
+	_hint.modulate.a = 0.0
 	_stats_visible = _stats_row.visible
+
+
+## 畫面中央短暫閃一行提示。用在「你剛剛解鎖了什麼」「這個現在還不行」
+## 這類必須當下說清楚、但不該一直佔著畫面的事。
+func flash_hint(text: String) -> void:
+	_hint.text = text
+	_hint.modulate.a = 1.0
+	if _hint_tween != null and _hint_tween.is_valid():
+		_hint_tween.kill()
+	_hint_tween = create_tween()
+	_hint_tween.tween_interval(HINT_HOLD)
+	_hint_tween.tween_property(_hint, "modulate:a", 0.0, HINT_FADE)
 
 
 func show_message(title: String, subtitle: String) -> void:

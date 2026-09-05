@@ -191,6 +191,7 @@ func _connect_player() -> void:
 	_player.died.connect(_on_player_died)
 	_player.milk_collected.connect(_on_milk_collected)
 	_player.throw_requested.connect(_on_throw_requested)
+	_player.throw_denied.connect(_on_throw_denied)
 	_player.pipe_entered.connect(_on_pipe_entered)
 	_player.checkpoint_reached.connect(_on_checkpoint_reached)
 
@@ -310,6 +311,9 @@ func _on_throw_requested(direction: int, origin: Vector2) -> void:
 	if not ThrowRules.fire(_player.state, stats):
 		return
 	Audio.play("throw")
+	# 丟出去會退還撿到時記的分數。這是計分系統的核心取捨，玩家要看得到它發生。
+	_effects.score_popup(_player.global_position + Vector2(0, -80),
+		-RunStats.COIN_SCORE)
 	var shot := _effects.coin_shot(origin, direction)
 	shot.hit_enemy.connect(_on_enemy_stomped)
 	shot.hit_boss.connect(_on_boss_shot)
@@ -317,12 +321,28 @@ func _on_throw_requested(direction: int, origin: Vector2) -> void:
 
 ## 金幣打中 Boss。以前這裡是個空的 pass——訊號接了卻什麼都不做，
 ## 而玩家最需要的正是「這一發有沒有生效」的回饋。
+## 按了丟金幣但還是小牛。給聲音也給一行字——玩家要知道的不是「壞了」，
+## 而是「這個能力我還沒解鎖」。
+func _on_throw_denied() -> void:
+	Audio.play("denied")
+	_hud.flash_hint("要先喝到漲停牛奶才丟得出金幣")
+
+
 func _on_boss_shot() -> void:
 	Audio.play("boss_hit")
 
 
 func _on_milk_collected() -> void:
-	if _player.grow() == PlayerState.BONUS:
+	var outcome := _player.grow()
+	if outcome == PlayerState.GREW:
+		# 變大是整場最重要的轉折：同時解鎖「不會一擊死」與「可以攻擊」。
+		# 以前這一刻的回饋只有「角色變大了」和 HUD 上突然出現的一個 ◆ 符號，
+		# 而重複拿才給的 1000 分浮字反而是玩家不需要的那一次。
+		_effects.score_popup(_player.global_position + Vector2(0, -110),
+			RunStats.MILK_FIRST_SCORE)
+		stats.add_score(RunStats.MILK_FIRST_SCORE)
+		_hud.flash_hint("變大了！按 %s 丟金幣攻擊" % _throw_key_name())
+	if outcome == PlayerState.BONUS:
 		stats.add_milk_bonus()
 		_effects.score_popup(_player.global_position + Vector2(0, -110),
 			RunStats.MILK_BONUS_SCORE)
@@ -470,6 +490,10 @@ func _enter_state(state: int, event := "") -> void:
 		Flow.PLAYING:
 			_hud.hide_message()
 			Audio.play_music()
+			# 關卡名寫在關卡檔第一行，解析出來之後卻從來沒上過螢幕——
+			#「盤面大道」這個名字是股市主題最直接的一次表達，白放著可惜。
+			if event == Flow.CONFIRM and _map != null and not _map.level_name.is_empty():
+				_hud.flash_hint(_map.level_name)
 			if event == Flow.DIED:
 				_respawn()
 		Flow.GAME_OVER:
@@ -491,6 +515,15 @@ func _enter_state(state: int, event := "") -> void:
 
 
 ## 把這一局記進最高分紀錄。
+## 丟金幣鍵現在綁在哪個鍵上。提示文字問輸入表要，重新綁鍵之後
+## 畫面上的說明才不會變成謊話。
+func _throw_key_name() -> String:
+	for event in InputMap.action_get_events("throw"):
+		if event is InputEventKey:
+			return OS.get_keycode_string(event.physical_keycode)
+	return "丟金幣鍵"
+
+
 ## 標題畫面的第二行。有紀錄就先報紀錄——刷分要有對照組才有意義。
 func _title_subtitle() -> String:
 	var controls := "空白鍵開始　方向鍵／WASD 移動　空白／↑ 跳　Shift 衝刺　Z 丟金幣　↓ 進水管　ESC 暫停"
