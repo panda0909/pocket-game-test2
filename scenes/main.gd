@@ -107,6 +107,10 @@ func _connect_level_nodes() -> void:
 			node.spawned_projectile.connect(_on_boss_projectile)
 			node.health_changed.connect(_hud.set_boss_health)
 			node.hit_absorbed.connect(_on_boss_hit_absorbed)
+			# 主動問一次現況。Boss 的 _ready() 在 LevelBuilder 把它加進樹的當下
+			# 就發過 health_changed 了，而這裡是建構完才接線——那一次發射沒有
+			# 任何人聽到。訊號只送「之後的變化」，初始狀態要接線方自己拿。
+			_hud.set_boss_health(BossRules.health_ratio(node.hp))
 
 	# Boss 還活著時旗竿不能碰。不然玩家可以直接繞過關底衝終點。
 	_set_goal_active(get_tree().get_nodes_in_group("boss").is_empty())

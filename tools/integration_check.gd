@@ -9,7 +9,7 @@ extends Node
 ## 而誤判為通過。
 
 ## 至少要跑到這麼多項檢查。加新檢查時把它調高。
-const MIN_CHECKS := 95
+const MIN_CHECKS := 100
 
 var _passed := 0
 var _failed := 0
@@ -55,6 +55,7 @@ func _ready() -> void:
 	await _check_pause_stops_the_world()
 	await _check_pause_is_released_on_state_change()
 	await _check_finishing_a_run_records_the_score()
+	await _check_boss_health_bar_shows_up()
 
 	print("---")
 	# 檢查總數也要守。單看「失敗 0」看不出有沒有檢查憑空消失——
@@ -1045,3 +1046,34 @@ func _group_of(type: String) -> String:
 		"platform_h", "platform_v": return "platform"
 		"bear", "spikeball", "arrow": return "enemy"
 	return ""
+
+
+## Boss 出場時血條要立刻看得到。
+##
+## 這條是看擷圖才發現的：Boss 的 _ready() 在 LevelBuilder 把它加進樹的當下
+## 就發了 health_changed，而 Main 的 _connect_level_nodes() 是建構完才接線——
+## 那一次發射沒有任何人聽到，血條於是從頭到尾不出現。訊號在接線之前就發過
+## 的初始狀態，一定要由接線方主動去問一次。
+func _check_boss_health_bar_shows_up() -> void:
+	var main := await _make_main()
+	main.begin_game()
+	await get_tree().physics_frame
+	var hud: HUD = main.get_node("HUD")
+	var boss: Node2D = _first_in_group(main, "boss")
+	if boss == null:
+		_fail("主關卡有 Boss（血條測試）")
+		main.queue_free()
+		await get_tree().process_frame
+		return
+	_expect(hud.get_node("Boss").visible,
+		"Boss 還活著時血條看得見")
+	_expect(is_equal_approx(hud.get_node("Boss/BossBar").value, 1.0),
+		"血條一開始是滿的", "value=%.2f" % hud.get_node("Boss/BossBar").value)
+
+	boss.take_shot()
+	await get_tree().physics_frame
+	_expect(hud.get_node("Boss/BossBar").value < 1.0,
+		"打中之後血條真的下降",
+		"value=%.2f" % hud.get_node("Boss/BossBar").value)
+	main.queue_free()
+	await get_tree().process_frame
