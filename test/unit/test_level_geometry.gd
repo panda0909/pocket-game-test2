@@ -153,3 +153,102 @@ func _column_is_a_pit(m: LevelMap, x: int, y: int) -> bool:
 		if TileGlossary.is_solid(m.terrain_at(Vector2i(x, below))):
 			return false
 	return true
+
+## 每一座移動平台，玩家自己要上得去。
+##
+## 舊版只在檢查「磚台段」時順便驗平台，所以旁邊沒有磚台的平台根本沒被掃到——
+## 第 230 格那座就是這樣溜過去的：站立面離地 304 px、跳躍上限 236 px，
+## 玩家上不去，而它行程頂端擺著兩枚「只有搭平台才拿得到」的金幣。
+func test_every_moving_platform_can_be_boarded() -> void:
+	var checked := 0
+	for path in _levels():
+		var m := LevelMap.load_from(path)
+		for entity in m.entities:
+			if not (entity["type"] in ["platform_h", "platform_v"]):
+				continue
+			checked += 1
+			var cell: Vector2i = entity["cell"]
+			# 平台停在起點那一格的中心，站立面在中心往上半個形狀高
+			var surface := float(cell.y) * TILE + TILE * 0.5 - 16.0
+			# 玩家是從水平跳躍範圍內最近的地面跳上去的，不一定是正下方——
+			# 平台常常就架在坑上，正下方本來就沒有地面。
+			assert_true(_can_step_up_to(m, cell.x, surface),
+				"%s 第 (%d, %d) 的平台站立面 y=%.0f，附近沒有跳得上去的落腳點"
+					% [path, cell.x, cell.y, surface])
+	assert_gt(checked, 2, "應該檢查到多座平台")
+
+## 每一枚金幣都要在某個站立面的跳躍範圍內。
+##
+## 站立面包含：地面、磚台頂、以及移動平台行程的頂端與底端。
+func test_every_coin_is_reachable() -> void:
+	var checked := 0
+	for path in _levels():
+		var m := LevelMap.load_from(path)
+		var surfaces := _standing_surfaces(m)
+		for entity in m.entities:
+			if entity["type"] != "coin":
+				continue
+			checked += 1
+			var cell: Vector2i = entity["cell"]
+			var coin_y := float(cell.y) * TILE + TILE * 0.5
+			assert_true(_reachable_from_any(surfaces, cell.x, coin_y),
+				"%s 第 (%d, %d) 的金幣沒有任何站立面搆得到"
+					% [path, cell.x, cell.y])
+	assert_gt(checked, 10, "應該檢查到很多金幣")
+
+## 蒐集所有站得住的表面：{x: 欄, y: 站立面世界座標}
+func _standing_surfaces(m: LevelMap) -> Array:
+	var out: Array = []
+	for y in m.height:
+		for x in m.width:
+			if not TileGlossary.is_solid(m.terrain_at(Vector2i(x, y))):
+				continue
+			# 上方要是空的才站得住
+			if TileGlossary.is_solid(m.terrain_at(Vector2i(x, y - 1))):
+				continue
+			out.append({"x": x, "y": float(y) * TILE})
+	for entity in m.entities:
+		if not (entity["type"] in ["platform_h", "platform_v"]):
+			continue
+		var vertical: bool = entity["type"] == "platform_v"
+		var travel: int = MovingPlatform.TRAVEL_V if vertical else MovingPlatform.TRAVEL_H
+		var cell: Vector2i = entity["cell"]
+		var base := float(cell.y) * TILE + TILE * 0.5 - 16.0
+		if vertical:
+			out.append({"x": cell.x, "y": base})
+			out.append({"x": cell.x, "y": base - float(travel) * TILE})
+		else:
+			for step in range(travel + 1):
+				out.append({"x": cell.x + step, "y": base})
+	return out
+
+## 從任何一個站立面搆得到這個高度嗎。
+##
+## 判準要算進玩家身高：接觸框涵蓋整個身體，所以能碰到的最高點是
+## 「腳底跳到的高度」再往上一個身高，不是腳底那條線。
+func _reachable_from_any(surfaces: Array, x: int, target_y: float) -> bool:
+	var reach := PlayerPhysics.jump_height() + Player.SMALL_BODY.y
+	for surface in surfaces:
+		var dx: float = absf(float(surface["x"] - x)) * TILE
+		var rise: float = float(surface["y"]) - target_y
+		if rise < -TILE:
+			continue  # 目標在腳下太多，這個面不算
+		if rise > reach:
+			continue
+		if dx > PlayerPhysics.jump_distance(PlayerPhysics.MAX_RUN_SPEED) * 0.5:
+			continue
+		return true
+	return false
+
+
+## 附近有沒有一個地面，跳上去就站得到這個高度（腳底，不含身高）。
+func _can_step_up_to(m: LevelMap, x: int, surface_y: float) -> bool:
+	for ground in _standing_surfaces(m):
+		var dx: float = absf(float(ground["x"] - x)) * TILE
+		var rise: float = float(ground["y"]) - surface_y
+		if rise < 0.0 or rise > PlayerPhysics.jump_height() - BOARD_MARGIN:
+			continue
+		if dx > PlayerPhysics.jump_distance(PlayerPhysics.MAX_RUN_SPEED) * 0.5:
+			continue
+		return true
+	return false

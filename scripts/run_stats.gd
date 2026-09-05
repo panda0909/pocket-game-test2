@@ -27,6 +27,8 @@ var time_left := 0.0
 var _time_limit := 0
 ## 已經領過的加命里程碑數，避免同一個門檻重複送。
 var _lives_granted := 0
+## 沒有加過分的金幣（開局送的）。丟出去時不該退分。
+var _unscored_coins := 0
 
 
 func _init(time_limit: int = 300) -> void:
@@ -61,12 +63,25 @@ func add_life() -> void:
 	lives = mini(MAX_LIVES, lives + 1)
 
 
+## 送幾枚開局金幣。角色特性用的，不加分——所以丟出去時也不扣分，
+## 否則那個「特性」實際上是負分。
+func grant_starting_coins(amount: int) -> void:
+	coins += amount
+	_unscored_coins += amount
+
+
 ## 花一枚金幣當彈藥；沒有金幣回 false，呼叫方不該生成投射物。
+##
 ## 撿到時記的分數會一併退掉——這樣「留著換分還是拿去打怪」才是真的取捨。
+## 但開局送的金幣當初沒有加分，退分時也要跳過，不然紅牛的「多兩枚金幣」
+## 會變成 −100 分的陷阱。
 func spend_coin() -> bool:
 	if coins <= 0:
 		return false
 	coins -= 1
+	if _unscored_coins > 0:
+		_unscored_coins -= 1
+		return true
 	score = maxi(0, score - COIN_SCORE)
 	return true
 

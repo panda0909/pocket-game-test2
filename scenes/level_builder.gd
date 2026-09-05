@@ -84,15 +84,34 @@ static func build_tileset() -> TileSet:
 ## 建構整張關卡。回傳 Main 需要知道的資訊。
 static func build(map: LevelMap, tile_layer: TileMapLayer,
 		entity_root: Node2D) -> BuildResult:
+	build_terrain(map, tile_layer)
+	var built := build_entities(map, entity_root)
+	return BuildResult.make(cell_bottom(map.spawn), map.pixel_size(TILE), built)
+
+
+## 只建地形。
+##
+## 拆出來是因為地形沒有狀態——它不記得誰撿過什麼，所以重建是安全的。
+## 實體不一樣：撿過的金幣、頂過的磚、打死的敵人全是狀態，重建就等於復活。
+## 進出水管暗房時只重建地形、把實體整組移出場景樹再放回來，就不會有
+## 「往返一次全部復活」的無限刷分。
+static func build_terrain(map: LevelMap, tile_layer: TileMapLayer) -> void:
 	tile_layer.clear()
 	if tile_layer.tile_set == null:
 		tile_layer.tile_set = build_tileset()
-	# 先 remove_child 再 queue_free。queue_free 是延後執行的，只呼叫它的話
-	# 舊節點在這一幀還留在樹上，Main 接訊號時會連到已經作廢的節點，
-	# 第二次載入關卡就會噴「訊號已經連過了」。
-	for child in entity_root.get_children():
-		entity_root.remove_child(child)
-		child.queue_free()
+	for y in map.height:
+		for x in map.width:
+			var cell := Vector2i(x, y)
+			var kind := map.terrain_at(cell)
+			if BlockRules.needs_node(kind) or not TILEMAP_KINDS.has(kind):
+				continue
+			tile_layer.set_cell(cell, SOURCE_ID,
+				Vector2i(TileGlossary.atlas_column(kind), 0), 0)
+
+
+## 清空並重建實體，回傳生成了幾個。
+static func build_entities(map: LevelMap, entity_root: Node2D) -> int:
+	clear_entities(entity_root)
 
 	var built := 0
 	for y in map.height:
@@ -106,12 +125,7 @@ static func build(map: LevelMap, tile_layer: TileMapLayer,
 				block.position = cell_center(cell)
 				entity_root.add_child(block)
 				built += 1
-				continue
-			if not TILEMAP_KINDS.has(kind):
-				continue
-			tile_layer.set_cell(cell, SOURCE_ID,
-				Vector2i(TileGlossary.atlas_column(kind), 0), 0)
-			if kind == TileGlossary.KIND_SPIKE:
+			elif kind == TileGlossary.KIND_SPIKE:
 				entity_root.add_child(_make_hazard(cell))
 				built += 1
 
@@ -123,8 +137,16 @@ static func build(map: LevelMap, tile_layer: TileMapLayer,
 			continue
 		entity_root.add_child(node)
 		built += 1
+	return built
 
-	return BuildResult.make(cell_bottom(map.spawn), map.pixel_size(TILE), built)
+
+## 先 remove_child 再 queue_free。queue_free 是延後執行的，只呼叫它的話
+## 舊節點在這一幀還留在樹上，Main 接訊號時會連到已經作廢的節點，
+## 第二次載入關卡就會噴「訊號已經連過了」。
+static func clear_entities(entity_root: Node2D) -> void:
+	for child in entity_root.get_children():
+		entity_root.remove_child(child)
+		child.queue_free()
 
 
 static func _make_hazard(cell: Vector2i) -> Area2D:

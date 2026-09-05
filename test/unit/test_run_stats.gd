@@ -124,3 +124,31 @@ func test_add_life_is_capped() -> void:
 	for i in 50:
 		stats.add_life()
 	assert_lte(stats.lives, RunStats.MAX_LIVES, "生命數要有上限")
+
+
+# --- 開局送的金幣 ---
+# 角色特性送的金幣當初沒有加分，丟出去時也不該扣分。以前直接寫 coins 欄位，
+# 而 spend_coin 無條件扣 50——紅牛的「開局多兩枚金幣」實際上是 −100 分。
+
+func test_starting_coins_do_not_add_score() -> void:
+	var stats := RunStats.new(300)
+	stats.grant_starting_coins(2)
+	assert_eq(stats.coins, 2)
+	assert_eq(stats.score, 0, "送的金幣不加分")
+
+func test_spending_a_starting_coin_does_not_deduct_score() -> void:
+	var stats := RunStats.new(300)
+	stats.grant_starting_coins(2)
+	stats.add_score(500)
+	assert_true(stats.spend_coin())
+	assert_eq(stats.score, 500, "沒加過分的金幣，丟出去也不該扣分")
+
+func test_picked_up_coins_still_refund_when_spent() -> void:
+	var stats := RunStats.new(300)
+	stats.grant_starting_coins(1)
+	stats.add_coin()
+	var after_pickup := stats.score
+	stats.spend_coin()   # 先花掉沒加分的那枚
+	assert_eq(stats.score, after_pickup)
+	stats.spend_coin()   # 再花撿來的那枚
+	assert_eq(stats.score, after_pickup - RunStats.COIN_SCORE)

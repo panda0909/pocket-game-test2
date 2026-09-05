@@ -55,9 +55,11 @@ func _ready() -> void:
 	await _check_pause_stops_the_world()
 	await _check_pause_is_released_on_state_change()
 	await _check_finishing_a_run_records_the_score()
-	await _check_boss_health_bar_shows_up()
+	await _check_boss_health_bar_follows_the_boss()
 	await _check_boss_health_bar_hidden_outside_gameplay()
 	await _check_clear_time_is_recorded_before_the_bonus()
+	await _check_pipe_does_not_respawn_collected_things()
+	await _check_pipe_does_not_respawn_enemies()
 
 	print("---")
 	# 檢查總數也要守。單看「失敗 0」看不出有沒有檢查憑空消失——
@@ -1050,33 +1052,41 @@ func _group_of(type: String) -> String:
 	return ""
 
 
-## Boss 出場時血條要立刻看得到。
+## Boss 血條只在 Boss 真的進畫面時才出現。
 ##
-## 這條是看擷圖才發現的：Boss 的 _ready() 在 LevelBuilder 把它加進樹的當下
-## 就發了 health_changed，而 Main 的 _connect_level_nodes() 是建構完才接線——
-## 那一次發射沒有任何人聽到，血條於是從頭到尾不出現。訊號在接線之前就發過
-## 的初始狀態，一定要由接線方主動去問一次。
-func _check_boss_health_bar_shows_up() -> void:
+## Boss 在第 272 格，玩家從第 0 格開始。血條若一開場就掛著，那 272 格
+## 它都是一個永遠不動的 UI——新手的解讀是「載入進度條卡住了」，而且
+## 玩家自發截圖分享時畫面上永遠有個看起來壞掉的東西。
+func _check_boss_health_bar_follows_the_boss() -> void:
 	var main := await _make_main()
 	main.begin_game()
 	await get_tree().physics_frame
-	var hud: HUD = main.get_node("HUD")
+	var boss_row: Control = main.get_node("HUD/Boss")
 	var boss: Node2D = _first_in_group(main, "boss")
 	if boss == null:
 		_fail("主關卡有 Boss（血條測試）")
 		main.queue_free()
 		await get_tree().process_frame
 		return
-	_expect(hud.get_node("Boss").visible,
-		"Boss 還活著時血條看得見")
-	_expect(is_equal_approx(hud.get_node("Boss/BossBar").value, 1.0),
-		"血條一開始是滿的", "value=%.2f" % hud.get_node("Boss/BossBar").value)
+
+	_expect(not boss_row.visible, "離 Boss 還很遠時血條不出現")
+
+	# 傳送到 Boss 旁邊
+	main.get_node("Player").enter_level(boss.global_position + Vector2(-200, 0))
+	for i in 20:
+		await get_tree().physics_frame
+		if boss_row.visible:
+			break
+	_expect(boss_row.visible, "Boss 進畫面之後血條出現")
+	_expect(is_equal_approx(main.get_node("HUD/Boss/BossBar").value, 1.0),
+		"血條一開始是滿的",
+		"value=%.2f" % main.get_node("HUD/Boss/BossBar").value)
 
 	boss.take_shot()
 	await get_tree().physics_frame
-	_expect(hud.get_node("Boss/BossBar").value < 1.0,
+	_expect(main.get_node("HUD/Boss/BossBar").value < 1.0,
 		"打中之後血條真的下降",
-		"value=%.2f" % hud.get_node("Boss/BossBar").value)
+		"value=%.2f" % main.get_node("HUD/Boss/BossBar").value)
 	main.queue_free()
 	await get_tree().process_frame
 
@@ -1096,7 +1106,8 @@ func _check_boss_health_bar_hidden_outside_gameplay() -> void:
 
 	await _tap(KEY_SPACE)
 	await get_tree().physics_frame
-	_expect(boss_row.visible, "開始遊戲之後 Boss 血條才出現")
+	_expect(not boss_row.visible,
+		"開始遊戲時 Boss 還在 272 格外，血條仍然不出現")
 	main.queue_free()
 	await get_tree().process_frame
 
@@ -1121,3 +1132,81 @@ func _check_clear_time_is_recorded_before_the_bonus() -> void:
 			% [main.save.best_time_left, seconds_at_goal])
 	main.queue_free()
 	await get_tree().process_frame
+
+
+## 水管往返不能讓已經撿走的東西復活。
+##
+## 這是「修好水管會清空成績」時換來的另一個 bug：keep_stats=true 讓分數
+## 延續，但 LevelBuilder.build 會清空並重建所有實體——分數保留、金幣復活，
+## 於是進出水管就能無限刷分（實測 162 分/秒，而每 5000 分送一條命）。
+## 最高分紀錄是全遊戲唯一的重玩動機，這個漏洞讓它失去意義。
+func _check_pipe_does_not_respawn_collected_things() -> void:
+	var main := await _make_main()
+	main.begin_game()
+	await get_tree().physics_frame
+
+	# 撿光主關卡的金幣
+	for node in get_tree().get_nodes_in_group("coin"):
+		if main.is_ancestor_of(node):
+			main.stats.add_coin()
+			node.queue_free()
+	await get_tree().physics_frame
+	var coins_left := _count_in(main, "coin")
+	_expect(coins_left == 0, "先把金幣撿光", "還剩 %d 枚" % coins_left)
+	var score_before: int = main.stats.score
+
+	if not await _enter_pipe(main):
+		_fail("主關卡有可進入的水管（復活測試）")
+		main.queue_free()
+		await get_tree().process_frame
+		return
+	main.call("_return_to_level")
+	await get_tree().physics_frame
+	await get_tree().process_frame
+
+	_expect(_count_in(main, "coin") == 0,
+		"水管往返之後金幣沒有復活",
+		"場上又出現 %d 枚金幣" % _count_in(main, "coin"))
+	_expect(main.stats.score == score_before,
+		"分數仍然延續", "%d -> %d" % [score_before, main.stats.score])
+	main.queue_free()
+	await get_tree().process_frame
+
+
+## 打死的敵人也不能因為往返而復活。
+func _check_pipe_does_not_respawn_enemies() -> void:
+	var main := await _make_main()
+	main.begin_game()
+	await get_tree().physics_frame
+	var before := _count_in(main, "enemy")
+	var target := _first_stompable(main)
+	if target == null:
+		_fail("主關卡有可踩的敵人（復活測試）")
+		main.queue_free()
+		await get_tree().process_frame
+		return
+	target.die()
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+
+	if not await _enter_pipe(main):
+		_fail("主關卡有可進入的水管（敵人復活測試）")
+		main.queue_free()
+		await get_tree().process_frame
+		return
+	main.call("_return_to_level")
+	await get_tree().physics_frame
+	await get_tree().process_frame
+	_expect(_count_in(main, "enemy") < before,
+		"水管往返之後敵人沒有復活",
+		"打死前 %d 隻，往返後 %d 隻" % [before, _count_in(main, "enemy")])
+	main.queue_free()
+	await get_tree().process_frame
+
+
+func _count_in(main: Node, group: String) -> int:
+	var n := 0
+	for node in get_tree().get_nodes_in_group(group):
+		if main.is_ancestor_of(node) and not node.is_queued_for_deletion():
+			n += 1
+	return n

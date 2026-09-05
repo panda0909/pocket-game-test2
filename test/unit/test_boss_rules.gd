@@ -61,3 +61,20 @@ func test_keeps_walking_inside_the_range() -> void:
 func test_aim_is_never_a_zero_vector() -> void:
 	var v := BossRules.aim_velocity(Vector2(200, 200), Vector2(200, 200), 300.0)
 	assert_almost_eq(v.length(), 300.0, 0.01)
+
+
+# --- 血條什麼時候出現 ---
+# 血條若從第 0 格就掛著，那 272 格它都是一個永遠不動的 UI。
+
+func test_bar_hidden_when_boss_is_far_away() -> void:
+	assert_false(BossRules.should_show_bar(0.0, 272.0 * 64.0),
+		"玩家在起點、Boss 在第 272 格，血條不該出現")
+
+func test_bar_shown_when_close() -> void:
+	assert_true(BossRules.should_show_bar(17000.0, 17100.0))
+
+func test_bar_range_is_symmetric() -> void:
+	var edge := BossRules.BAR_RANGE - 1.0
+	assert_true(BossRules.should_show_bar(1000.0, 1000.0 + edge))
+	assert_true(BossRules.should_show_bar(1000.0, 1000.0 - edge))
+	assert_false(BossRules.should_show_bar(1000.0, 1000.0 + BossRules.BAR_RANGE + 1.0))

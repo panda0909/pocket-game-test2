@@ -28,6 +28,15 @@ var _checkpoint := Vector2.INF
 ## 進水管前站的位置。從暗房回來時要放回這裡，玩家才不會迷失方向。
 var _return_position := Vector2.INF
 var _in_room := false
+## 進暗房時主關卡的實體整組移出場景樹，回來時原封不動放回去。
+##
+## 不重建是關鍵：地形沒有狀態，實體有。撿過的金幣、頂過的磚、打死的敵人
+## 全是狀態，重建就等於復活——而分數是延續的，於是進出水管可以無限刷分
+## （實測 162 分/秒，每 5000 分送一條命）。離開場景樹的節點不處理也不碰撞，
+## 狀態卻完整保留，連訊號都還接著。
+var _stashed_entities: Node2D = null
+var _stashed_index := 0
+var _main_map: LevelMap = null
 var _death_pending := false
 ## 關卡檔壞掉時停在標題並說明，不要讓玩家掉進沒有地形的虛空。
 var _level_broken := false
@@ -71,12 +80,13 @@ func _load_level(path: String, spawn_override := Vector2.INF,
 		return false
 
 	_map = map
+	_main_map = map
 	var result := LevelBuilder.build(_map, _tiles, _entities)
 	# 分數與計時活在 Main，不隨關卡重建——進暗房不該把時間洗掉。
 	if not keep_stats:
 		stats = RunStats.new(_map.time_limit)
-		# 角色的初始金幣。走 add_coin 會連分數一起加，所以直接設欄位。
-		stats.coins = int(Roster.traits(character_index)["start_coins"])
+		stats.grant_starting_coins(
+			int(Roster.traits(character_index)["start_coins"]))
 	# 暗房沒有 S，關卡起點沿用主關卡的，回來時才找得到路。
 	if not _map.is_room:
 		_spawn = result.spawn_position
@@ -110,11 +120,35 @@ func _connect_level_nodes() -> void:
 			# 主動問一次現況。Boss 的 _ready() 在 LevelBuilder 把它加進樹的當下
 			# 就發過 health_changed 了，而這裡是建構完才接線——那一次發射沒有
 			# 任何人聽到。訊號只送「之後的變化」，初始狀態要接線方自己拿。
-			_hud.set_boss_health(BossRules.health_ratio(node.hp))
+			#
+			# 但只同步數值、不顯示：顯示與否由 Boss 進出畫面的訊號決定。
+			_hud.sync_boss_health(BossRules.health_ratio(node.hp))
 
+	_refresh_level_ui()
+
+
+## 旗竿與 Boss 血條的狀態。從暗房回來時也要跑一次——那條路徑不重接訊號，
+## 但畫面該反映的東西還是要更新。
+## Boss 血條跟著距離走。Boss 在第 272 格而玩家從第 0 格開始——血條若一開場
+## 就掛著，那 272 格它都是一個永遠不動的 UI，新手的解讀是「載入卡住了」。
+func _refresh_boss_bar() -> void:
+	var bosses := get_tree().get_nodes_in_group("boss")
+	if bosses.is_empty():
+		_hud.hide_boss_health()
+		return
+	var boss: Node2D = bosses[0]
+	if BossRules.should_show_bar(_player.global_position.x, boss.global_position.x):
+		_hud.show_boss_health()
+	else:
+		_hud.hide_boss_health()
+
+
+func _refresh_level_ui() -> void:
 	# Boss 還活著時旗竿不能碰。不然玩家可以直接繞過關底衝終點。
-	_set_goal_active(get_tree().get_nodes_in_group("boss").is_empty())
-	if get_tree().get_nodes_in_group("boss").is_empty():
+	var bosses := get_tree().get_nodes_in_group("boss")
+	_set_goal_active(bosses.is_empty())
+	# 血條的顯示交給 Boss 的進出畫面訊號，這裡只保證離場時收乾淨。
+	if bosses.is_empty():
 		_hud.hide_boss_health()
 
 
@@ -171,31 +205,81 @@ func _on_goal_reached() -> void:
 	_advance(Flow.GOAL)
 
 
-## 進水管。暗房是另一張關卡檔，整張換掉；分數與計時延續。
+## 進水管。暗房是另一張關卡，但主關卡不會被重建——見 _stashed_entities。
 func _on_pipe_entered(target: String) -> void:
 	if target.is_empty():
 		return
 	if target == "__return__":
 		_return_to_level()
 		return
-	var back := _player.global_position
-	var room_path := "res://levels/%s.txt" % target
-	var entry := _room_entry(room_path)
-	# 旗標只在真的換場成功之後才翻。以前先設 _in_room = true 再載入，
-	# 暗房檔壞掉時畫面完全沒變，旗標卻永久卡在 true——之後檢查點全部失效。
-	if not _load_level(room_path, entry, true):
+	if _in_room:
 		return
+	_enter_room("res://levels/%s.txt" % target)
+
+
+## 進暗房。成功才翻旗標——暗房檔壞掉時畫面完全不變，旗標若先翻就會
+## 永久卡住，之後所有檢查點都失效。
+func _enter_room(room_path: String) -> bool:
+	var room := LevelMap.load_from(room_path)
+	if not room.is_valid():
+		for message in room.errors:
+			push_error("暗房 %s：%s" % [room_path, message])
+		return false
+	var entry := _room_entry(room, room_path)
+	if not entry.is_finite():
+		return false
+
+	var back := _player.global_position
+	# 主關卡整組收起來，不是丟掉
+	_stashed_index = _entities.get_index()
+	_stashed_entities = _entities
+	_main_map = _map
+	remove_child(_entities)
+
+	_entities = Node2D.new()
+	_entities.name = "RoomEntities"
+	add_child(_entities)
+	move_child(_entities, _stashed_index)
+	_effects.clear()
+
+	_map = room
+	LevelBuilder.build_terrain(room, _tiles)
+	LevelBuilder.build_entities(room, _entities)
+	_player.enter_level(entry)
+	_player.set_camera_bounds(room.pixel_size(TILE))
+	_connect_level_nodes()
+
 	_return_position = back
 	_in_room = true
+	return true
+
+
+## 回主關卡。實體是原班人馬放回去，只有地形重建。
+func _leave_room(at: Vector2) -> void:
+	if not _in_room or _stashed_entities == null:
+		return
+	_entities.queue_free()
+	_entities = _stashed_entities
+	_stashed_entities = null
+	add_child(_entities)
+	move_child(_entities, _stashed_index)
+	_effects.clear()
+
+	_map = _main_map
+	LevelBuilder.build_terrain(_map, _tiles)
+	_player.enter_level(at)
+	_player.set_camera_bounds(_map.pixel_size(TILE))
+	# 不重接訊號——那些節點從頭到尾是同一批，訊號還連著。
+	_refresh_level_ui()
+
+	_in_room = false
+	_return_position = Vector2.INF
 
 
 ## 暗房的落點由關卡自己的中繼資料 entry: x,y 指定。
 ## 以前寫死成 Vector2(160, 448)，那是專為現在這張 20x8 暗房算出來的像素座標——
 ## 換一張形狀不同的暗房，玩家就會生在牆裡或半空中。
-func _room_entry(room_path: String) -> Vector2:
-	var room := LevelMap.load_from(room_path)
-	if not room.is_valid():
-		return Vector2.INF
+func _room_entry(room: LevelMap, room_path: String) -> Vector2:
 	var raw := str(room.meta.get("entry", ""))
 	var parts := raw.split(",")
 	if parts.size() != 2 or not parts[0].strip_edges().is_valid_int() \
@@ -207,21 +291,10 @@ func _room_entry(room_path: String) -> Vector2:
 
 
 func _return_to_level() -> void:
-	if not _in_room:
-		return
 	# 放在原水管右邊一格，免得一回來就又踩進管口無限往返
-	if not _load_level(_level_path,
-			_return_position + Vector2(LevelBuilder.TILE, 0), true):
-		return
-	_in_room = false
-	_return_position = Vector2.INF
+	_leave_room(_return_position + Vector2(LevelBuilder.TILE, 0))
 
 
-## 檢查點的識別靠節點本身，不是座標。
-##
-## 以前是拿 Vector2 做精確相等比對去找是哪一支旗子——只因為那個值是從
-## area.global_position 原封不動傳回來的才成立。任何一天在中途做了座標
-## 換算或加了偏移，旗子就再也不會變色，而且不會有任何錯誤訊息。
 func _on_checkpoint_reached(world_position: Vector2) -> void:
 	if _in_room:
 		return
@@ -354,6 +427,7 @@ func _process(delta: float) -> void:
 	var before := stats.seconds_left()
 	if stats.tick(delta):
 		_kill_player()
+	_refresh_boss_bar()
 	# 跨過警告線的那一秒響一次，不是每幀都響。
 	if before > HURRY_SECONDS and stats.seconds_left() <= HURRY_SECONDS:
 		Audio.play("hurry")
@@ -436,6 +510,10 @@ func _record_run(cleared: bool, time_left := 0) -> void:
 
 
 func _restart_run() -> void:
+	# 新的一局：暫存的主關卡實體要丟掉，_load_level 會重建一套全新的。
+	if _stashed_entities != null:
+		_stashed_entities.queue_free()
+		_stashed_entities = null
 	_in_room = false
 	_return_position = Vector2.INF
 	_checkpoint = Vector2.INF
@@ -445,10 +523,9 @@ func _restart_run() -> void:
 
 func _respawn() -> void:
 	if _in_room:
-		# 在暗房裡死掉要回到主關卡，但成績要延續——扣掉的那條命不能被補回來。
-		if _load_level(_level_path, Vector2.INF, true):
-			_in_room = false
-			_return_position = Vector2.INF
+		# 在暗房裡死掉要回到主關卡，但成績要延續——扣掉的那條命不能被補回來，
+		# 已經撿走的東西也不能因為換場而復活。
+		_leave_room(_respawn_position())
 	stats.restart_level()
 	_player.respawn_at(_respawn_position())
 

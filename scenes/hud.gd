@@ -74,9 +74,19 @@ func set_stats_visible(visible_now: bool) -> void:
 ## 六發，每發之間還有 0.8 秒無敵，而「打中了沒傷害」與「打中了有傷害」
 ## 在畫面上長得一模一樣。玩家會誤以為金幣打不動 Boss 而放棄那條路線，
 ## 但那正是設計的核心。
-func set_boss_health(ratio: float) -> void:
-	_boss_present = true
+## 只更新數值，不動顯示與否。
+func sync_boss_health(ratio: float) -> void:
 	_boss_bar.value = clampf(ratio, 0.0, 1.0)
+
+
+## 血量變了。Boss 一定在畫面上才會被打到，所以順便確保血條看得見。
+func set_boss_health(ratio: float) -> void:
+	sync_boss_health(ratio)
+	show_boss_health()
+
+
+func show_boss_health() -> void:
+	_boss_present = true
 	_refresh_boss_row()
 
 
@@ -85,11 +95,12 @@ func hide_boss_health() -> void:
 	_refresh_boss_row()
 
 
-## 血條要同時滿足兩個條件才看得見：場上有 Boss，而且現在真的在玩。
+## 血條要同時滿足兩個條件才看得見：Boss 真的在畫面上，而且現在在玩。
 ##
-## 關卡在標題狀態就已經建好了（背景要看得到），所以 Boss 也在場上、血條
-## 也被同步過一次——少了後面那個條件，標題畫面上方會掛著一條滿血的
-## 「關底 Boss熊」。
+## 少了第二個條件，標題畫面上方會掛著一條滿血的「關底 Boss熊」（關卡在
+## 標題狀態就建好了，背景要看得到）。少了第一個條件，血條會從第 0 格
+## 掛到第 290 格——Boss 在第 272 格，中間 272 格它都是一個永遠不動的 UI，
+## 新手的解讀是「載入進度條卡住了」。
 func _refresh_boss_row() -> void:
 	_boss_row.visible = _boss_present and _stats_visible
 

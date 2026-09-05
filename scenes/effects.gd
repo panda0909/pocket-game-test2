@@ -88,3 +88,11 @@ func coin_shot(origin: Vector2, direction: int) -> CoinShot:
 	add_child(shot)
 	shot.launch(direction)
 	return shot
+
+
+## 清掉場上所有短命物件。換場時用——暗房裡頂出來卻沒撿的牛奶、
+## 還在飛的金幣，都不該跟著玩家穿過水管。
+func clear() -> void:
+	for child in get_children():
+		remove_child(child)
+		child.queue_free()

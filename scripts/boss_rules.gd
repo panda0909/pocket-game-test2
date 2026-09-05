@@ -17,6 +17,14 @@ const BODY_SIZE := Vector2(96, 104)
 ## 瞄準玩家身體中段。
 const AIM_OFFSET := Vector2(0, 60)
 
+## 玩家離 Boss 多近才顯示血條。設計解析度的半個畫面寬——Boss 一進視野
+## 血條就在，但不會從第 0 格就掛著。
+##
+## 為什麼不用 VisibleOnScreenNotifier2D：那是渲染層的東西，headless 下不觸發，
+## 於是這條規則沒辦法被測試守著。而「血條什麼時候出現」是設計決定，
+## 本來就該是一條可測的規則。
+const BAR_RANGE := 700.0
+
 const MAX_HP := 3
 const STOMP_DAMAGE := 1.0
 const SHOT_DAMAGE := 0.5
@@ -55,3 +63,8 @@ static func aim_velocity(from: Vector2, target: Vector2,
 	if to_target.length_squared() < 1.0:
 		return Vector2.DOWN * speed
 	return to_target.normalized() * speed
+
+
+## 該不該顯示 Boss 血條。
+static func should_show_bar(player_x: float, boss_x: float) -> bool:
+	return absf(player_x - boss_x) <= BAR_RANGE
