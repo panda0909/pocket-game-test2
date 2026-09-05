@@ -9,7 +9,7 @@ extends Node
 ## 而誤判為通過。
 
 ## 至少要跑到這麼多項檢查。加新檢查時把它調高。
-const MIN_CHECKS := 118
+const MIN_CHECKS := 125
 
 var _passed := 0
 var _failed := 0
@@ -63,6 +63,9 @@ func _ready() -> void:
 	await _check_small_player_gets_feedback_when_throwing()
 	await _check_pipe_shows_a_prompt()
 	await _check_goal_reads_as_a_goal()
+	await _check_collect_percent_tracks_progress()
+	await _check_flawless_survives_respawn()
+	await _check_end_menu_shows_collection()
 
 	print("---")
 	# 檢查總數也要守。單看「失敗 0」看不出有沒有檢查憑空消失——
@@ -1288,5 +1291,62 @@ func _check_goal_reads_as_a_goal() -> void:
 	_expect(is_equal_approx(goal_sprite.modulate.a, 1.0),
 		"鎖住的終點不是靠變透明表現（透明看起來像沒畫完）",
 		"alpha=%.2f" % goal_sprite.modulate.a)
+	main.queue_free()
+	await get_tree().process_frame
+
+
+## 收集率的分母要包含暗房，而且真的會隨遊玩上升。
+func _check_collect_percent_tracks_progress() -> void:
+	var main := await _make_main()
+	main.begin_game()
+	await get_tree().physics_frame
+
+	var level := LevelMap.load_from("res://levels/level1.txt")
+	var room := LevelMap.load_from("res://levels/level1_pipe_a.txt")
+	var expected_coin: int = level.collectible_totals()["coin"] \
+		+ room.collectible_totals()["coin"]
+	_expect(main.stats.targets["coin"] == expected_coin,
+		"收集率的分母把暗房也算進去了",
+		"分母 %d，主關卡加暗房是 %d"
+			% [main.stats.targets["coin"], expected_coin])
+	_expect(main.stats.collect_percent() == 0, "開局收集率是 0")
+
+	for node in get_tree().get_nodes_in_group("coin"):
+		if main.is_ancestor_of(node):
+			main.stats.add_coin()
+	_expect(main.stats.collect_percent() > 0, "撿了金幣收集率會上升",
+		"仍然是 %d%%" % main.stats.collect_percent())
+	main.queue_free()
+	await get_tree().process_frame
+
+
+## 受傷會結束無傷，而且死亡重生不會把它洗掉。
+func _check_flawless_survives_respawn() -> void:
+	var main := await _make_main()
+	main.begin_game()
+	await get_tree().physics_frame
+	_expect(main.stats.flawless, "開局是無傷狀態")
+
+	main.call("_on_damaged")
+	await get_tree().physics_frame
+	_expect(not main.stats.flawless, "受傷之後不再是無傷")
+
+	await _die_by_falling(main)
+	_expect(not main.stats.flawless, "死亡重生不會把受傷紀錄洗掉")
+	main.queue_free()
+	await get_tree().process_frame
+
+
+## 結束畫面要看得到收集率——那是第二輪的理由。
+func _check_end_menu_shows_collection() -> void:
+	var main := await _make_main()
+	main.begin_game()
+	await get_tree().physics_frame
+	main.stats.add_coin()
+	main.call("_advance", Flow.GOAL)
+	await get_tree().process_frame
+	var detail: Label = main.get_node("EndMenu/Panel/Detail")
+	_expect(detail.text.contains("收集率"),
+		"結束畫面顯示收集率", "實際是「%s」" % detail.text)
 	main.queue_free()
 	await get_tree().process_frame

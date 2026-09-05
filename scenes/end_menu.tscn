@@ -63,6 +63,11 @@ text = "分數 0　　金幣 0 枚"
 horizontal_alignment = 1
 label_settings = SubResource("score_style")
 
+[node name="Detail" type="Label" parent="Panel"]
+text = ""
+horizontal_alignment = 1
+label_settings = SubResource("note_style")
+
 [node name="Row" type="HBoxContainer" parent="Panel"]
 theme_override_constants/separation = 20
 alignment = 1

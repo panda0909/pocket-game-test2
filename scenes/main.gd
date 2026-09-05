@@ -88,6 +88,7 @@ func _load_level(path: String, spawn_override := Vector2.INF,
 		stats = RunStats.new(_map.time_limit)
 		stats.grant_starting_coins(
 			int(Roster.traits(character_index)["start_coins"]))
+		_apply_collect_targets(map)
 	# 暗房沒有 S，關卡起點沿用主關卡的，回來時才找得到路。
 	if not _map.is_room:
 		_spawn = result.spawn_position
@@ -99,6 +100,23 @@ func _load_level(path: String, spawn_override := Vector2.INF,
 	_player.set_camera_bounds(result.level_size)
 	_connect_level_nodes()
 	return true
+
+
+## 收集率的分母：主關卡加上它指向的每一間暗房。
+##
+## 暗房要算進去，否則玩家找到暗房、全部撿光，收集率會超過 100%。
+## 反過來說，這也讓「有沒有找到水管」直接反映在收集率上——那正是
+## 我們希望玩家去發現的事。
+func _apply_collect_targets(map: LevelMap) -> void:
+	var totals := map.collectible_totals()
+	for target in map.room_targets():
+		var room := LevelMap.load_from("res://levels/%s.txt" % target)
+		if not room.is_valid():
+			continue
+		var room_totals := room.collectible_totals()
+		for key in room_totals:
+			totals[key] += room_totals[key]
+	stats.set_targets(totals["coin"], totals["enemy"], totals["milk"])
 
 
 ## 玩家死亡後該站回哪裡：拿過檢查點就回檢查點，否則回關卡起點。
@@ -164,6 +182,7 @@ func _on_boss_hit_absorbed() -> void:
 
 
 func _on_boss_defeated() -> void:
+	stats.count_enemy_defeated()
 	Audio.play("boss_down")
 	_hud.hide_boss_health()
 	stats.add_score(BossRules.SCORE)
@@ -339,6 +358,8 @@ func _on_boss_shot() -> void:
 
 func _on_milk_collected() -> void:
 	var outcome := _player.grow()
+	if outcome != PlayerState.IGNORED:
+		stats.count_milk_found()
 	if outcome == PlayerState.GREW:
 		# 變大是整場最重要的轉折：同時解鎖「不會一擊死」與「可以攻擊」。
 		# 以前這一刻的回饋只有「角色變大了」和 HUD 上突然出現的一個 ◆ 符號，
@@ -354,12 +375,14 @@ func _on_milk_collected() -> void:
 
 
 func _on_enemy_stomped(kind: int) -> void:
+	stats.count_enemy_defeated()
 	var amount := EnemyRules.score(kind)
 	stats.add_score(amount)
 	_effects.score_popup(_player.global_position + Vector2(0, -80), amount)
 
 
 func _on_damaged() -> void:
+	stats.count_damage_taken()
 	_player.take_hit()
 
 
@@ -528,7 +551,7 @@ func _enter_state(state: int, event := "") -> void:
 			Audio.stop_music()
 			_hud.hide_message()
 			_record_run(false)
-			_end_menu.show_result(false, stats.score, stats.coins)
+			_end_menu.show_result(false, stats)
 		Flow.CLEARED:
 			Audio.stop_music()
 			Audio.play("clear")
@@ -538,7 +561,7 @@ func _enter_state(state: int, event := "") -> void:
 			stats.finish()
 			_hud.hide_message()
 			_record_run(true, time_at_goal)
-			_end_menu.show_result(true, stats.score, stats.coins)
+			_end_menu.show_result(true, stats)
 	_hud.update_stats(stats, _player.state.is_big())
 
 
@@ -564,15 +587,19 @@ func _title_subtitle() -> String:
 		controls = "空白鍵開始　方向鍵／WASD 移動　空白／↑ 跳　Shift 衝刺　%s 丟金幣　↓ 進水管　ESC 暫停" % _throw_key_name()
 	if save.best_score <= 0:
 		return controls
-	var record := "最高分 %d　金幣 %d 枚" % [save.best_score, save.best_coins]
+	var record := "最高分 %d　金幣 %d 枚　收集率 %d%%" % [
+		save.best_score, save.best_coins, save.best_collect_pct]
 	if save.cleared:
 		record += "　已通關（最佳剩餘 %d 秒）" % save.best_time_left
+	if save.flawless_clear:
+		record += "　★ 無傷通關"
 	return record + "\n" + controls
 
 
 ## 把這一局記進最高分紀錄。
 func _record_run(cleared: bool, time_left := 0) -> void:
-	if save.record_run(stats.score, stats.coins, cleared, time_left):
+	if save.record_run(stats.score, stats.found["coin"], cleared, time_left,
+			stats.collect_percent(), stats.flawless):
 		_end_menu.show_note("新紀錄！上一個最高分是 %d" % save.best_score)
 	save.save_to_disk()
 

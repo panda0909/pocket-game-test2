@@ -88,6 +88,42 @@ func drift_direction(cell: Vector2i) -> int:
 	return 1
 
 
+## 這張關卡總共有多少可收集／可打倒的東西。收集率用它當分母。
+##
+## 問號磚也算金幣（頂一下就噴一枚），牛奶磚自己一類，Boss 算敵人。
+## 純資料運算，所以「關卡改了分母會不會跟著變」有測試守著。
+func collectible_totals() -> Dictionary:
+	var totals := {"coin": 0, "enemy": 0, "milk": 0}
+	for y in height:
+		for x in width:
+			var kind := terrain_at(Vector2i(x, y))
+			if kind == TileGlossary.KIND_QUESTION:
+				totals["coin"] += 1
+			elif kind == TileGlossary.KIND_MILK_BRICK:
+				totals["milk"] += 1
+	for entity in entities:
+		match entity["type"]:
+			"coin":
+				totals["coin"] += 1
+			"bear", "spikeball", "arrow", "boss":
+				totals["enemy"] += 1
+	return totals
+
+
+## 這張關卡的中繼資料指向哪些暗房。收集率的分母要把暗房也算進去，
+## 不然玩家找到暗房、全撿光，收集率反而超過 100%。
+func room_targets() -> Array:
+	var out: Array = []
+	for key in meta:
+		if not str(key).begins_with("pipe"):
+			continue
+		var target := str(meta[key])
+		if target.is_empty() or target == "__return__":
+			continue
+		out.append(target)
+	return out
+
+
 ## 關卡的像素尺寸，供相機夾邊界用。
 func pixel_size(tile: int) -> Vector2:
 	return Vector2(width * tile, height * tile)

@@ -28,6 +28,7 @@ var _buttons: Array[Button] = []
 @onready var _share_preview: TextureRect = $Panel/SharePreview
 @onready var _row: HBoxContainer = $Panel/Row
 @onready var _note: Label = $Panel/Note
+@onready var _detail: Label = $Panel/Detail
 
 
 func _ready() -> void:
@@ -52,9 +53,17 @@ func _build_buttons() -> void:
 		_buttons.append(button)
 
 
-func show_result(cleared: bool, score: int, coins: int) -> void:
+## 結算。收下整個 RunStats 而不是幾個散裝數字——成績有四條軸
+## （分數、金幣、收集率、無傷），再往上加就會變成一長串參數。
+func show_result(cleared: bool, stats: RunStats) -> void:
 	_title.text = "通關！" if cleared else "遊戲結束"
-	_score.text = "分數 %d　　金幣 %d 枚" % [score, coins]
+	_score.text = "分數 %d　　金幣 %d 枚" % [stats.score, stats.found["coin"]]
+	# 收集率與無傷是給第二輪、第三輪的理由。第一次通關看到「收集率 58%」
+	# 才會知道自己漏了什麼。
+	var marks: Array[String] = ["收集率 %d%%" % stats.collect_percent()]
+	if cleared and stats.flawless:
+		marks.append("全程無傷")
+	_detail.text = "　　".join(marks)
 	_share_preview.tooltip_text = "這張圖片就是分享到社群時使用的預覽圖"
 	_note.text = ""
 	_index = ACTIONS.find(DEFAULT_ACTION)

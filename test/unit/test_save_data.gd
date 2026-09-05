@@ -69,3 +69,40 @@ func test_broken_dictionary_falls_back_to_defaults() -> void:
 	var empty := SaveData.from_dict({})
 	assert_eq(empty.best_score, 0)
 	assert_false(empty.cleared)
+
+# --- 收集率與無傷的紀錄 ---
+
+func test_records_best_collect_percent() -> void:
+	var save := SaveData.new()
+	save.record_run(1000, 5, false, 0, 40, false)
+	assert_eq(save.best_collect_pct, 40)
+	save.record_run(9999, 9, true, 60, 25, false)
+	assert_eq(save.best_collect_pct, 40, "收集率各留各的最佳，不會被高分那局蓋掉")
+	save.record_run(100, 1, false, 0, 88, false)
+	assert_eq(save.best_collect_pct, 88)
+
+## 無傷只有真的通關才算。半路無傷死掉不是成就。
+func test_flawless_requires_clearing() -> void:
+	var save := SaveData.new()
+	save.record_run(5000, 5, false, 0, 50, true)
+	assert_false(save.flawless_clear, "沒通關的無傷不算")
+	save.record_run(5000, 5, true, 30, 50, true)
+	assert_true(save.flawless_clear)
+
+func test_flawless_is_sticky() -> void:
+	var save := SaveData.new()
+	save.record_run(5000, 5, true, 30, 50, true)
+	save.record_run(9999, 9, true, 60, 90, false)
+	assert_true(save.flawless_clear, "拿過就永遠是拿過")
+
+func test_new_fields_round_trip() -> void:
+	var save := SaveData.new()
+	save.record_run(4321, 7, true, 88, 73, true)
+	var restored := SaveData.from_dict(save.to_dict())
+	assert_eq(restored.best_collect_pct, 73)
+	assert_true(restored.flawless_clear)
+
+func test_broken_new_fields_fall_back() -> void:
+	var save := SaveData.from_dict({"best_collect_pct": "壞掉", "flawless_clear": 7})
+	assert_eq(save.best_collect_pct, 0)
+	assert_false(save.flawless_clear)

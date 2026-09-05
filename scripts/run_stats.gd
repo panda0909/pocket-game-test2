@@ -33,6 +33,12 @@ var score := 0
 var coins := 0
 var lives := START_LIVES
 var time_left := 0.0
+## 這一局撿過／打倒過多少。和 coins 不同：coins 是手上剩的彈藥，
+## 這裡問的是「走過多少內容」，花掉的金幣仍然算撿過。
+var found := {"coin": 0, "enemy": 0, "milk": 0}
+var targets := {"coin": 0, "enemy": 0, "milk": 0}
+## 這一局有沒有受過傷。無傷是硬派玩家最愛的自我設限，而判定成本近乎零。
+var flawless := true
 
 var _time_limit := 0
 ## 已經領過的加命里程碑數，避免同一個門檻重複送。
@@ -48,7 +54,43 @@ func _init(time_limit: int = 300) -> void:
 
 func add_coin() -> void:
 	coins += 1
+	found["coin"] += 1
 	add_score(COIN_SCORE)
+
+
+## 關卡有多少可收集的東西。收集率的分母。
+func set_targets(coin: int, enemy: int, milk: int) -> void:
+	targets = {"coin": maxi(0, coin), "enemy": maxi(0, enemy),
+		"milk": maxi(0, milk)}
+
+
+func count_enemy_defeated() -> void:
+	found["enemy"] += 1
+
+
+func count_milk_found() -> void:
+	found["milk"] += 1
+
+
+## 受過傷就不再是無傷。死一次重生也不會洗掉——無傷是一整局的事。
+func count_damage_taken() -> void:
+	flawless = false
+
+
+## 收集率。三類各佔三分之一，不是「加起來除以總數」——否則金幣多的關卡
+## 會讓敵人與牛奶的權重被稀釋到看不見。
+func collect_percent() -> int:
+	var counted := 0
+	var total := 0.0
+	for key in targets:
+		var goal: int = targets[key]
+		if goal <= 0:
+			continue
+		counted += 1
+		total += minf(1.0, float(found[key]) / float(goal))
+	if counted == 0:
+		return 0
+	return int(round(total / float(counted) * 100.0))
 
 
 func add_milk_bonus() -> void:
