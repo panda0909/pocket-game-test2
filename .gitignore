@@ -2,18 +2,29 @@
 .godot/
 /android/
 
-# 匯出產物（含 tools/publish_pages.sh 用的暫存 repo）
-/build/
+# 匯出產物（含 tools/publish_pages.sh 用的暫存 repo）。
+#
+# 用 /build/* 而不是 /build/，否則 git 根本不會走進這個目錄，底下的
+# .gdignore 就沒辦法用 ! 例外進版控——而那個檔案必須跟著 clone 一起來：
+# 少了它，Godot 會把上一次匯出的 icon 與分享圖當成專案資源匯入，
+# 下一次匯出再把它們打包進新的 PCK，每發佈一次就膨脹一點。
+/build/*
+!/build/.gdignore
 /export/
 
 # 資產處理用的 Python 虛擬環境
 tools/.venv/
 __pycache__/
 
-# 臨時診斷腳本（開發過程中用完即刪）
-_*.gd
-_*.tscn
-_*.uid
+# 臨時診斷腳本（開發過程中用完即刪）。
+#
+# 一定要加目錄錨點。以前寫成沒有錨點的 _*.gd，那是遞迴套用到全專案的樣式：
+# 哪天有人寫 scripts/_helpers.gd（底線開頭在 GDScript 是常見的「私有」慣例），
+# git 會靜靜忽略它，直到別人 clone 後專案跑不起來才發現。
+/scratch/
+/tools/_*.gd
+/tools/_*.tscn
+/tools/_*.uid
 
 # macOS
 .DS_Store

@@ -9,26 +9,142 @@ extends CanvasLayer
 @onready var _lives: Label = $Top/Lives
 @onready var _time: Label = $Top/Time
 @onready var _dim: ColorRect = $Dim
+@onready var _boss_row: VBoxContainer = $Boss
+@onready var _boss_bar: ProgressBar = $Boss/BossBar
+@onready var _hint: Label = $Hint
 @onready var _message: VBoxContainer = $Message
 @onready var _title: Label = $Message/Title
 @onready var _subtitle: Label = $Message/Subtitle
 
 
+## 剩幾秒開始警告。Main 的警告音也用這個值，兩邊不會各寫一個 30。
+const HURRY_SECONDS := 30
+
+## 提示停留與淡出。夠久到讀得完一句話，短到不會擋住下一個動作。
+const HINT_HOLD := 1.6
+const HINT_FADE := 0.5
+
+const NORMAL_COLOR := Color(1, 1, 1)
+const HURRY_COLOR := Color(1, 0.45, 0.4)
+
+## 上一幀的值。update_stats 是每幀被呼叫的，但四個數字裡只有時間會每秒
+## 變一次——分數與金幣一整場可能都不變。不比對就等於每秒做 240 次
+## 字串格式化與配置，在 Web 版的單執行緒環境是白繳的。
+var _last_score := -1
+var _last_coins := -1
+var _last_lives := -1
+var _last_seconds := -1
+var _last_big := false
+var _boss_present := false
+var _stats_visible := false
+var _hint_tween: Tween = null
+
+
 func update_stats(stats: RunStats, is_big: bool) -> void:
-	_score.text = "分數 %06d" % stats.score
-	# 金幣同時是彈藥，大牛時標上彈匣符號提醒它可以丟
-	_coins.text = "%s %d" % ["金幣◆" if is_big else "金幣", stats.coins]
-	_lives.text = "生命 %d" % stats.lives
-	_time.text = "時間 %03d" % stats.seconds_left()
-	# 剩不到 30 秒轉紅，這是玩家唯一會注意到時間的時刻
-	_time.modulate = Color(1, 0.45, 0.4) if stats.seconds_left() <= 30 \
-		else Color(1, 1, 1)
+	if stats.score != _last_score:
+		_last_score = stats.score
+		_score.text = "分數 %06d" % stats.score
+	if stats.coins != _last_coins or is_big != _last_big:
+		_last_coins = stats.coins
+		_last_big = is_big
+		# 金幣同時是彈藥，大牛時標上彈匣符號提醒它可以丟
+		_coins.text = "%s %d" % ["金幣◆" if is_big else "金幣", stats.coins]
+	if stats.lives != _last_lives:
+		_last_lives = stats.lives
+		_lives.text = "生命 %d" % stats.lives
+	var seconds := stats.seconds_left()
+	if seconds != _last_seconds:
+		_last_seconds = seconds
+		_time.text = "時間 %03d" % seconds
+		# 剩不到 30 秒轉紅，這是玩家唯一會注意到時間的時刻
+		_time.modulate = HURRY_COLOR if seconds <= HURRY_SECONDS else NORMAL_COLOR
+
+
+## 換一局要把快取清掉，不然新的一局數字剛好一樣時 Label 不會更新。
+func reset_cache() -> void:
+	_last_score = -1
+	_last_coins = -1
+	_last_lives = -1
+	_last_seconds = -1
 
 
 ## 上方那排數值只在真的在玩的時候有意義。標題與選角畫面顯示
 ## 「分數 000000　時間 300」只是雜訊，選角畫面還會和角色圖疊在一起。
 func set_stats_visible(visible_now: bool) -> void:
+	_stats_visible = visible_now
 	_stats_row.visible = visible_now
+	_refresh_boss_row()
+
+
+## Boss 血條。玩家原本完全看不出自己打了幾下、還要打幾下——金幣路線要
+## 六發，每發之間還有 0.8 秒無敵，而「打中了沒傷害」與「打中了有傷害」
+## 在畫面上長得一模一樣。玩家會誤以為金幣打不動 Boss 而放棄那條路線，
+## 但那正是設計的核心。
+## 只更新數值，不動顯示與否。
+func sync_boss_health(ratio: float) -> void:
+	_boss_bar.value = clampf(ratio, 0.0, 1.0)
+
+
+## 血量變了。Boss 一定在畫面上才會被打到，所以順便確保血條看得見。
+func set_boss_health(ratio: float) -> void:
+	sync_boss_health(ratio)
+	show_boss_health()
+
+
+func show_boss_health() -> void:
+	_boss_present = true
+	_refresh_boss_row()
+
+
+func hide_boss_health() -> void:
+	_boss_present = false
+	_refresh_boss_row()
+
+
+## 血條要同時滿足兩個條件才看得見：Boss 真的在畫面上，而且現在在玩。
+##
+## 少了第二個條件，標題畫面上方會掛著一條滿血的「關底 Boss熊」（關卡在
+## 標題狀態就建好了，背景要看得到）。少了第一個條件，血條會從第 0 格
+## 掛到第 290 格——Boss 在第 272 格，中間 272 格它都是一個永遠不動的 UI，
+## 新手的解讀是「載入進度條卡住了」。
+func _refresh_boss_row() -> void:
+	_boss_row.visible = _boss_present and _stats_visible
+
+
+func _ready() -> void:
+	_boss_row.visible = false
+	_hint.modulate.a = 0.0
+	_style_boss_bar()
+
+
+## 血條用 Godot 內建的 ProgressBar 樣式時，滿血是一條純灰半透明的板子，
+## 背景的雲會透出來——新手的解讀是「載入進度條卡住了」。染成紅底黑框，
+## 它才讀得出是血量。
+func _style_boss_bar() -> void:
+	var track := StyleBoxFlat.new()
+	track.bg_color = Color(0.1, 0.11, 0.14, 0.85)
+	track.border_color = Color(0.85, 0.87, 0.92, 0.9)
+	track.set_border_width_all(2)
+	track.set_corner_radius_all(4)
+	_boss_bar.add_theme_stylebox_override("background", track)
+
+	var fill := StyleBoxFlat.new()
+	fill.bg_color = Color(0.86, 0.22, 0.24)
+	fill.set_corner_radius_all(3)
+	_boss_bar.add_theme_stylebox_override("fill", fill)
+	_stats_visible = _stats_row.visible
+
+
+## 畫面中央短暫閃一行提示。用在「你剛剛解鎖了什麼」「這個現在還不行」
+## 這類必須當下說清楚、但不該一直佔著畫面的事。
+func flash_hint(text: String) -> void:
+	_hint.text = text
+	_hint.modulate.a = 1.0
+	if _hint_tween != null and _hint_tween.is_valid():
+		_hint_tween.kill()
+	_hint_tween = create_tween()
+	_hint_tween.tween_interval(HINT_HOLD)
+	_hint_tween.tween_property(_hint, "modulate:a", 0.0, HINT_FADE)
 
 
 func show_message(title: String, subtitle: String) -> void:

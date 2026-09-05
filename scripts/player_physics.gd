@@ -20,6 +20,13 @@ const MAX_RUN_SPEED := 280.0
 const SPRINT_SPEED := 420.0
 const GROUND_ACCEL := 1600.0
 const GROUND_BRAKE := 2000.0
+## 迴轉（推的方向和目前速度相反）用的加速度。
+##
+## 一定要比 GROUND_BRAKE 大。以前反向推用 GROUND_ACCEL(1600)、鬆手煞停用
+## GROUND_BRAKE(2000)，於是「鬆手再按」比「直接反向」還快 0.05 秒——熟練
+## 玩家一定會發現，然後養成一個違反直覺的操作習慣。而 0.26 秒的迴轉本身
+## 也偏黏，那是全遊戲最像「不聽話」的地方。
+const TURN_ACCEL := 2600.0
 const AIR_ACCEL := 1100.0
 const JUMP_VELOCITY := -720.0
 const GRAVITY_RISE := 1100.0
@@ -29,7 +36,12 @@ const TERMINAL_FALL := 900.0
 const COYOTE_TIME := 0.10
 const JUMP_BUFFER := 0.12
 const STOMP_BOUNCE := -480.0
-const STOMP_BOUNCE_HELD := -640.0
+## 按住跳鍵踩敵人的回彈。
+##
+## 一定要爬得比滿跳（236 px）高，否則「連踩爬高」在物理上不可能——舊值 -640
+## 的回彈高度只有 186 px，踩敵人反而比自己跳還矮，那條規則等於不存在。
+## -780 換算是 276 px，比滿跳高 40 px，剛好夠踩一下上一層。
+const STOMP_BOUNCE_HELD := -780.0
 
 
 ## 推進一幀。
@@ -44,18 +56,26 @@ static func step(velocity: Vector2, input: Dictionary, on_floor: bool,
 	var jump_held: bool = input.get("jump_held", false)
 	# 舊的呼叫沒有這個鍵，預設當走路——現有測試因此不必全部改。
 	var sprint: bool = input.get("sprint", false)
+	# 角色修飾值。沒帶就用基準常數，所以只有 Player 需要傳，
+	# 純物理的測試仍然可以只給方向與跳躍。
+	var sprint_speed: float = input.get("sprint_speed", SPRINT_SPEED)
+	var coyote_time: float = input.get("coyote_time", COYOTE_TIME)
 
 	var coyote: float = timers.get("coyote", 0.0)
 	var buffer: float = timers.get("buffer", 0.0)
 
-	coyote = COYOTE_TIME if on_floor else coyote - delta
+	coyote = coyote_time if on_floor else coyote - delta
 	buffer = JUMP_BUFFER if jump_pressed else buffer - delta
 
 	var new_velocity := velocity
 
 	if not is_zero_approx(dir):
 		var accel := GROUND_ACCEL if on_floor else AIR_ACCEL
-		var top_speed := SPRINT_SPEED if sprint else MAX_RUN_SPEED
+		# 推的方向和現在的速度相反＝迴轉，用更大的加速度收回來。
+		if on_floor and not is_zero_approx(new_velocity.x) \
+				and signf(new_velocity.x) != signf(dir):
+			accel = TURN_ACCEL
+		var top_speed := sprint_speed if sprint else MAX_RUN_SPEED
 		# 放開衝刺時 move_toward 會用同一組加速度把速度收回走路上限，
 		# 所以鬆手是自然減速，不是瞬間掉一截。
 		new_velocity.x = move_toward(new_velocity.x, dir * top_speed, accel * delta)
@@ -85,8 +105,25 @@ static func step(velocity: Vector2, input: Dictionary, on_floor: bool,
 	}
 
 
+## 由水平速度決定面向，速度為零時沿用上一次的方向。
+##
+## 不要寫成 signi(int(velocity.x))：|vx| 落在 (1e-5, 1) 時 is_zero_approx
+## 不成立、int() 卻截斷成 0，signi(0) 回 0——主角的 scale.x 會變成 0
+## （整隻消失一幀），丟出去的金幣方向也會是 0。
+static func facing_from_velocity(horizontal_speed: float, current_facing: int) -> int:
+	if is_zero_approx(horizontal_speed):
+		return current_facing
+	return 1 if horizontal_speed > 0.0 else -1
+
+
 static func stomp_velocity(jump_held: bool) -> float:
 	return STOMP_BOUNCE_HELD if jump_held else STOMP_BOUNCE
+
+
+## 踩踏回彈的最大高度。關卡排版與測試用它判斷「踩上去搆不搆得到」。
+static func stomp_height(jump_held: bool) -> float:
+	var v := stomp_velocity(jump_held)
+	return (v * v) / (2.0 * GRAVITY_RISE)
 
 
 ## 理論最大跳躍高度，供關卡排版與測試對照設計值。
@@ -100,6 +137,23 @@ static func jump_distance(horizontal_speed: float) -> float:
 	var rise_time := absf(JUMP_VELOCITY) / GRAVITY_RISE
 	var fall_time := sqrt(2.0 * jump_height() / GRAVITY_FALL)
 	return horizontal_speed * (rise_time + fall_time)
+
+
+## 建 step() 的 input。用具名參數而不是讓每個呼叫端自己拼字串鍵——
+## 鍵名打錯的話 step() 只會靜靜地用預設值，表現成「這個角色的衝刺沒生效」
+## 而不是任何錯誤。player_physics.gd:46 的註解「舊的呼叫沒有這個鍵」正好
+## 說明這個契約已經悄悄演化過，而沒有任何東西擋得住下一次。
+static func new_input(dir: float, jump_pressed: bool, jump_held: bool,
+		sprint: bool, sprint_speed := SPRINT_SPEED,
+		coyote_time := COYOTE_TIME) -> Dictionary:
+	return {
+		"dir": dir,
+		"jump_pressed": jump_pressed,
+		"jump_held": jump_held,
+		"sprint": sprint,
+		"sprint_speed": sprint_speed,
+		"coyote_time": coyote_time,
+	}
 
 
 static func new_timers() -> Dictionary:

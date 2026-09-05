@@ -1,4 +1,4 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=12 format=3]
 
 [ext_resource type="Script" path="res://scenes/main.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/player.tscn" id="2"]
@@ -6,6 +6,10 @@
 [ext_resource type="PackedScene" path="res://scenes/hud.tscn" id="4"]
 [ext_resource type="PackedScene" path="res://scenes/character_select.tscn" id="5"]
 [ext_resource type="PackedScene" path="res://scenes/end_menu.tscn" id="6"]
+[ext_resource type="PackedScene" path="res://scenes/pause_menu.tscn" id="7"]
+[ext_resource type="PackedScene" path="res://scenes/touch_controls.tscn" id="8"]
+[ext_resource type="Script" path="res://scenes/effects.gd" id="9"]
+[ext_resource type="PackedScene" path="res://scenes/score_card_view.tscn" id="10"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1")
@@ -22,6 +26,9 @@ centered = false
 
 [node name="Entities" type="Node2D" parent="."]
 
+[node name="Effects" type="Node2D" parent="."]
+script = ExtResource("9")
+
 [node name="Player" parent="." instance=ExtResource("2")]
 
 [node name="HUD" parent="." instance=ExtResource("4")]
@@ -31,3 +38,10 @@ visible = false
 
 [node name="EndMenu" parent="." instance=ExtResource("6")]
 visible = false
+
+[node name="PauseMenu" parent="." instance=ExtResource("7")]
+visible = false
+
+[node name="TouchControls" parent="." instance=ExtResource("8")]
+
+[node name="ScoreCard" parent="." instance=ExtResource("10")]

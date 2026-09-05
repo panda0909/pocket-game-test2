@@ -60,7 +60,9 @@ func _on_body_entered(body: Node2D) -> void:
 		enemy.die()
 		hit_enemy.emit(kind)
 		queue_free()
-	elif body is TileMapLayer:
-		# 撞到牆（不是地板）就消失，不然它會卡在牆裡一直彈
+	else:
+		# 其他任何實心物體（地形、問號磚、水管、移動平台）都當牆看。
+		# 以前只認 TileMapLayer，於是金幣會直接穿過問號磚與水管飛走。
+		# 撞到牆（不是地板）就消失，不然它會卡在牆裡一直彈。
 		if absf(_velocity.y) < 60.0:
 			queue_free()

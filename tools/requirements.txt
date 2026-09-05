@@ -1,0 +1,17 @@
+# 資產管線的相依套件。
+#
+# 版本要釘死：prepare_assets.py 宣稱「相同輸入永遠產生相同輸出」，但
+# Image.LANCZOS 的重採樣、rounded_rectangle 的抗鋸齒、ImageFont 的 stroke
+# 渲染都會隨 Pillow 版本改變。不釘版本的話，換一台機器重跑就會產生位元
+# 不同的 PNG，git 上是一堆二進位 diff，而且分不清是「真的改了」還是
+# 「Pillow 換版了」。
+#
+# 安裝：
+#     python3 -m venv tools/.venv
+#     tools/.venv/bin/pip install -r tools/requirements.txt
+#
+# 測試過的 Python：3.14.6
+Pillow==12.3.0
+
+# 字型子集化（prepare_font.py）
+fonttools==4.62.1

@@ -178,3 +178,113 @@ func test_sprint_only_ever_lengthens_the_jump() -> void:
 func test_walk_jump_still_clears_a_four_cell_gap() -> void:
 	assert_gt(PlayerPhysics.jump_distance(PlayerPhysics.MAX_RUN_SPEED),
 		4.0 * 64.0)
+
+# --- 面向方向 ---
+# 原本寫在 Player 裡的 signi(int(velocity.x))：只要 |vx| 落在 (1e-5, 1)，
+# is_zero_approx 不成立但 int() 截斷成 0，signi(0) 回 0，
+# 主角的 sprite.scale.x 會變成 0（整個看不見），丟出的金幣方向也是 0。
+
+func test_facing_is_positive_when_moving_right() -> void:
+	assert_eq(PlayerPhysics.facing_from_velocity(120.0, -1), 1)
+
+func test_facing_is_negative_when_moving_left() -> void:
+	assert_eq(PlayerPhysics.facing_from_velocity(-120.0, 1), -1)
+
+func test_facing_keeps_previous_when_stopped() -> void:
+	assert_eq(PlayerPhysics.facing_from_velocity(0.0, -1), -1)
+	assert_eq(PlayerPhysics.facing_from_velocity(0.0, 1), 1)
+
+func test_facing_never_returns_zero_for_tiny_speeds() -> void:
+	# 這正是舊寫法會回 0 的區間。
+	for speed in [0.5, 0.1, 0.001, -0.5, -0.999]:
+		var f := PlayerPhysics.facing_from_velocity(speed, 1)
+		assert_ne(f, 0, "速度 %s 不該讓面向變成 0" % speed)
+
+
+# --- 角色修飾值 ---
+# step() 的 input 多兩個可選鍵。沒帶就用基準常數，舊的呼叫不必全部改。
+
+func test_sprint_speed_can_be_overridden() -> void:
+	var input := _sprint(1.0)
+	input["sprint_speed"] = 600.0
+	var v := Vector2.ZERO
+	var t := _timers(PlayerPhysics.COYOTE_TIME)
+	for i in 240:
+		var r := PlayerPhysics.step(v, input, true, D, t)
+		v = r["velocity"]
+		t = r["timers"]
+	assert_almost_eq(v.x, 600.0, 1.0)
+
+func test_sprint_speed_defaults_to_the_baseline() -> void:
+	assert_almost_eq(_run_until_stable(_sprint(1.0)),
+		PlayerPhysics.SPRINT_SPEED, 1.0)
+
+func test_coyote_time_can_be_overridden() -> void:
+	# 離開地面之後還能跳多久
+	var input := _ipt(0.0)
+	input["coyote_time"] = 0.5
+	var r := PlayerPhysics.step(Vector2.ZERO, input, true, D, _timers())
+	assert_almost_eq(float(r["timers"]["coyote"]), 0.5, 0.001)
+
+func test_coyote_time_defaults_to_the_baseline() -> void:
+	var r := PlayerPhysics.step(Vector2.ZERO, _ipt(0.0), true, D, _timers())
+	assert_almost_eq(float(r["timers"]["coyote"]), PlayerPhysics.COYOTE_TIME, 0.001)
+
+
+# --- 迴轉 ---
+# 方向鍵反向推用的是 GROUND_ACCEL(1600)，鬆手煞停用 GROUND_BRAKE(2000)——
+# 於是「鬆手再按」比「直接反向」還快，熟練玩家會養成一個違反直覺的習慣。
+# 迴轉本身 0.525 秒也偏黏，那是全遊戲最像「不聽話」的地方。
+
+func _turn_time(from_speed: float) -> float:
+	var v := Vector2(from_speed, 0)
+	var t := _timers(PlayerPhysics.COYOTE_TIME)
+	var frames := 0
+	var dir := -signf(from_speed)
+	while frames < 600:
+		var r := PlayerPhysics.step(v, _ipt(dir), true, D, t)
+		v = r["velocity"]
+		t = r["timers"]
+		frames += 1
+		if signf(v.x) == dir or is_zero_approx(v.x):
+			break
+	return float(frames) * D
+
+func test_turning_around_is_faster_than_releasing_and_repressing() -> void:
+	var turn := _turn_time(PlayerPhysics.SPRINT_SPEED)
+	# 鬆手再按：先用煞停加速度歸零，再用一般加速度起步
+	var release := PlayerPhysics.SPRINT_SPEED / PlayerPhysics.GROUND_BRAKE
+	assert_lt(turn, release,
+		"直接反向要比鬆手再按快，否則玩家會養成鬆手的怪習慣")
+
+func test_turning_around_is_not_sluggish() -> void:
+	assert_lt(_turn_time(PlayerPhysics.SPRINT_SPEED), 0.40,
+		"從衝刺速度迴轉不該超過 0.4 秒")
+
+
+# --- 連踩爬高 ---
+# 按住跳鍵踩敵人要真的爬得比自己跳還高，否則「連踩」在物理上不可能——
+# 舊值 -640 的回彈高度是 186 px，比 236 px 的跳躍還矮，踩敵人反而往下走。
+
+func test_stomp_with_jump_held_climbs_higher_than_a_normal_jump() -> void:
+	assert_gt(PlayerPhysics.stomp_height(true), PlayerPhysics.jump_height(),
+		"按住跳鍵踩踏要爬得比滿跳高，連踩爬高才成立")
+
+func test_stomp_without_holding_is_a_short_hop() -> void:
+	assert_lt(PlayerPhysics.stomp_height(false), PlayerPhysics.jump_height(),
+		"不按住的踩踏只是小跳，這樣兩者才有差別")
+
+func test_stomp_height_matches_the_velocity() -> void:
+	var v := PlayerPhysics.stomp_velocity(true)
+	assert_almost_eq(PlayerPhysics.stomp_height(true),
+		v * v / (2.0 * PlayerPhysics.GRAVITY_RISE), 0.01)
+
+
+# --- 衝刺要能一口氣飛過走路過不去的坑 ---
+
+func test_sprint_clears_a_gap_that_walking_cannot() -> void:
+	var walk := PlayerPhysics.jump_distance(PlayerPhysics.MAX_RUN_SPEED)
+	var sprint := PlayerPhysics.jump_distance(PlayerPhysics.SPRINT_SPEED)
+	var six_cells := 6.0 * LevelBuilder.TILE
+	assert_lt(walk, six_cells, "走路跳不過六格")
+	assert_gt(sprint, six_cells, "衝刺跳得過六格")

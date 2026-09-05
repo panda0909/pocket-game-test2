@@ -1,7 +1,7 @@
 [gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://scenes/hud.gd" id="1"]
-[ext_resource type="FontFile" path="res://assets/fonts/NotoSansTC-Bold.otf" id="2"]
+[ext_resource type="FontFile" path="res://assets/fonts/NotoSansTC-Bold.subset.otf" id="2"]
 
 [sub_resource type="LabelSettings" id="stat_style"]
 font = ExtResource("2")
@@ -53,6 +53,39 @@ label_settings = SubResource("stat_style")
 [node name="Time" type="Label" parent="Top"]
 text = "時間 300"
 label_settings = SubResource("stat_style")
+
+[node name="Boss" type="VBoxContainer" parent="."]
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -220.0
+offset_top = 78.0
+offset_right = 220.0
+offset_bottom = 148.0
+theme_override_constants/separation = 6
+alignment = 1
+
+[node name="BossName" type="Label" parent="Boss"]
+text = "關底 Boss熊"
+horizontal_alignment = 1
+label_settings = SubResource("subtitle_style")
+
+[node name="BossBar" type="ProgressBar" parent="Boss"]
+custom_minimum_size = Vector2(440, 22)
+max_value = 1.0
+step = 0.001
+value = 1.0
+show_percentage = false
+
+[node name="Hint" type="Label" parent="."]
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -520.0
+offset_top = 168.0
+offset_right = 520.0
+offset_bottom = 220.0
+text = ""
+horizontal_alignment = 1
+label_settings = SubResource("subtitle_style")
 
 [node name="Message" type="VBoxContainer" parent="."]
 anchor_left = 0.5

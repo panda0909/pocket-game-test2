@@ -5,6 +5,22 @@ extends RefCounted
 ## 這種分支寫在節點裡沒辦法測，而它一旦寫錯，玩家會遇到「明明還有命卻結束了」
 ## 這種最惱人的 bug。
 
+## 事件名稱。以前是散在各處的字串字面值，Flow.next 對認不得的事件一律
+## 回傳原狀態——拼錯一個字的表現是「按了沒反應」，沒有任何錯誤訊息。
+const START := "start"
+const CONFIRM := "confirm"
+const BACK := "back"
+const DIED := "died"
+const GOAL := "goal"
+## 回標題（想換角色，或暫停選單的「放棄這局」）。
+const RESTART := "restart"
+## 直接再玩一次，沿用同一隻角色。
+##
+## 以前「再玩一次」也走 RESTART 回標題，玩家要再按空白、再過選角、再按
+## 空白才回到遊戲——刷分產品的核心指標是「一個 session 玩幾次」，每多一個
+## 中間畫面，第二次遊玩的轉換率就掉一截。
+const AGAIN := "again"
+
 const TITLE := 0
 const PLAYING := 1
 const GAME_OVER := 2
@@ -15,22 +31,24 @@ const SELECT := 4
 static func next(state: int, event: String, lives_left: int) -> int:
 	match state:
 		TITLE:
-			if event == "start":
+			if event == START:
 				return SELECT
 		SELECT:
 			match event:
-				"confirm":
+				CONFIRM:
 					return PLAYING
-				"back":
+				BACK:
 					return TITLE
 		PLAYING:
 			match event:
-				"died":
+				DIED:
 					return PLAYING if lives_left > 0 else GAME_OVER
-				"goal":
+				GOAL:
 					return CLEARED
 		GAME_OVER, CLEARED:
-			if event == "restart":
+			if event == AGAIN:
+				return PLAYING
+			if event == RESTART:
 				return TITLE
 	return state
 

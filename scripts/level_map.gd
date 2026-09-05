@@ -18,6 +18,9 @@ extends RefCounted
 ## 落點由 Main 指定，所以跳過那兩條驗證。
 const SEPARATOR := "---"
 const DEFAULT_TIME := 300
+## 關卡檔損毀成亂碼時，每格一則錯誤會產生數千則字串，Main 再逐則
+## push_error，在 Web 版會明顯凍結。超過就收成一行總結。
+const MAX_CHAR_ERRORS := 20
 
 var errors: Array[String] = []
 var width := 0
@@ -61,6 +64,66 @@ func terrain_at(cell: Vector2i) -> int:
 	return row[cell.x]
 
 
+## 往下找第一格實心地面的列號。整欄都沒有地面（磚塊架在坑上）時回關卡
+## 底部，玩家至少看得到東西掉下去。
+##
+## 這段和 drift_direction 原本寫在 main.gd 上——是純資料運算卻掛在 Node2D
+## 上，於是完全進不了單元測試，牛奶掉錯格只能靠跑整個場景才發現。
+func ground_surface_row_below(cell: Vector2i) -> int:
+	for row in range(cell.y + 1, height):
+		if TileGlossary.is_solid(terrain_at(Vector2i(cell.x, row))):
+			return row
+	return height
+
+
+## 頂出來的東西往哪邊滑。右邊有實心而左邊沒有就往左，其餘往右——
+## 差別只在觀感，落點高度已經由 ground_surface_row_below 保證站得到。
+func drift_direction(cell: Vector2i) -> int:
+	var right_blocked := TileGlossary.is_solid(
+		terrain_at(Vector2i(cell.x + 1, cell.y)))
+	var left_blocked := TileGlossary.is_solid(
+		terrain_at(Vector2i(cell.x - 1, cell.y)))
+	if right_blocked and not left_blocked:
+		return -1
+	return 1
+
+
+## 這張關卡總共有多少可收集／可打倒的東西。收集率用它當分母。
+##
+## 問號磚也算金幣（頂一下就噴一枚），牛奶磚自己一類，Boss 算敵人。
+## 純資料運算，所以「關卡改了分母會不會跟著變」有測試守著。
+func collectible_totals() -> Dictionary:
+	var totals := {"coin": 0, "enemy": 0, "milk": 0}
+	for y in height:
+		for x in width:
+			var kind := terrain_at(Vector2i(x, y))
+			if kind == TileGlossary.KIND_QUESTION:
+				totals["coin"] += 1
+			elif kind == TileGlossary.KIND_MILK_BRICK:
+				totals["milk"] += 1
+	for entity in entities:
+		match entity["type"]:
+			"coin":
+				totals["coin"] += 1
+			"bear", "spikeball", "arrow", "boss":
+				totals["enemy"] += 1
+	return totals
+
+
+## 這張關卡的中繼資料指向哪些暗房。收集率的分母要把暗房也算進去，
+## 不然玩家找到暗房、全撿光，收集率反而超過 100%。
+func room_targets() -> Array:
+	var out: Array = []
+	for key in meta:
+		if not str(key).begins_with("pipe"):
+			continue
+		var target := str(meta[key])
+		if target.is_empty() or target == "__return__":
+			continue
+		out.append(target)
+	return out
+
+
 ## 關卡的像素尺寸，供相機夾邊界用。
 func pixel_size(tile: int) -> Vector2:
 	return Vector2(width * tile, height * tile)
@@ -74,8 +137,11 @@ func _parse(text: String) -> void:
 	_validate()
 
 
-## 切出中繼資料與地圖兩段，回傳地圖行。找不到分界線就把全部當地圖——
-## 這讓測試可以只寫地圖，不必每次都補標頭。
+## 切出中繼資料與地圖兩段，回傳地圖行。
+##
+## 分界線是必要的，不是可選的：「#」在中繼資料區是註解、在地圖區是地面磚，
+## 沒有分界線就無從分辨。以前找不到分界線時會把全部當地圖，結果是有人寫了
+## 一行註解卻得到一整排地面加上一串「未知字元」錯誤。
 func _split_header(lines: PackedStringArray) -> PackedStringArray:
 	var sep := -1
 	for i in lines.size():
@@ -83,7 +149,8 @@ func _split_header(lines: PackedStringArray) -> PackedStringArray:
 			sep = i
 			break
 	if sep < 0:
-		return lines
+		errors.append("關卡檔必須有一行 %s 分界線，用來隔開中繼資料與地圖" % SEPARATOR)
+		return PackedStringArray()
 
 	for i in sep:
 		var line := lines[i].strip_edges()
@@ -126,6 +193,7 @@ func _read_map(map_lines: PackedStringArray) -> void:
 
 	var spawn_count := 0
 	var goal_count := 0
+	var unknown_chars := 0
 
 	for y in height:
 		var row: String = rows[y]
@@ -141,7 +209,9 @@ func _read_map(map_lines: PackedStringArray) -> void:
 
 			var type := TileGlossary.entity_type(ch)
 			if type.is_empty():
-				errors.append("第 %d 行第 %d 欄有未知字元「%s」" % [y + 1, x + 1, ch])
+				unknown_chars += 1
+				if unknown_chars <= MAX_CHAR_ERRORS:
+					errors.append("第 %d 行第 %d 欄有未知字元「%s」" % [y + 1, x + 1, ch])
 				continue
 
 			if type == "spawn":
@@ -157,6 +227,9 @@ func _read_map(map_lines: PackedStringArray) -> void:
 				"params": _entity_params(ch, type),
 			})
 		terrain.append(cells)
+
+	if unknown_chars > MAX_CHAR_ERRORS:
+		errors.append("另有 %d 個未知字元未逐一列出" % (unknown_chars - MAX_CHAR_ERRORS))
 
 	if not is_room:
 		if spawn_count != 1:

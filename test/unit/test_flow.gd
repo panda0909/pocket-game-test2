@@ -52,3 +52,22 @@ func test_only_playing_counts_down() -> void:
 func test_select_is_a_distinct_state() -> void:
 	for other in [Flow.TITLE, Flow.PLAYING, Flow.GAME_OVER, Flow.CLEARED]:
 		assert_ne(Flow.SELECT, other)
+
+
+# --- 再玩一次 ---
+# 以前「再玩一次」回的是 TITLE，玩家要再按空白、再過選角、再按空白才回到
+# 遊戲，而且是從第 0 格開始。刷分產品的核心指標是「一個 session 玩幾次」，
+# 每多一個中間畫面，第二次遊玩的轉換率就掉一截。
+
+func test_again_goes_straight_back_to_playing() -> void:
+	assert_eq(Flow.next(Flow.GAME_OVER, Flow.AGAIN, 0), Flow.PLAYING)
+	assert_eq(Flow.next(Flow.CLEARED, Flow.AGAIN, 3), Flow.PLAYING)
+
+func test_restart_still_goes_to_title() -> void:
+	# 想換角色的人走這條，暫停選單的「放棄這局」也是。
+	assert_eq(Flow.next(Flow.GAME_OVER, Flow.RESTART, 0), Flow.TITLE)
+	assert_eq(Flow.next(Flow.CLEARED, Flow.RESTART, 3), Flow.TITLE)
+
+func test_again_does_nothing_mid_game() -> void:
+	assert_eq(Flow.next(Flow.PLAYING, Flow.AGAIN, 3), Flow.PLAYING)
+	assert_eq(Flow.next(Flow.TITLE, Flow.AGAIN, 3), Flow.TITLE)

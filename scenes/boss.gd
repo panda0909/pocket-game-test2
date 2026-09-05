@@ -7,21 +7,27 @@ extends CharacterBody2D
 ## 但壓迫感來自體型、皇冠與會反擊，不是來自畫風突然變了。
 
 signal defeated
-signal touched_player
-signal spawned_projectile(position: Vector2, direction: Vector2)
+signal health_changed(ratio: float)
+signal spawned_projectile(origin: Vector2, direction: Vector2)
+## 打中了但在無敵幀內。玩家最需要分辨的就是這個和真的扣血的差別。
+signal hit_absorbed
 
-const GRAVITY := 1400.0
-const WALK_SPEED := 90.0
-const PATROL_HALF_WIDTH := 192.0
-const THROW_INTERVAL := 2.5
-const BODY_SIZE := Vector2(96, 104)
+## 移動、投擲與體型的數值全部在 BossRules，這裡只負責演出。
+const BODY_SIZE := BossRules.BODY_SIZE
+## boss.png 是 128x128，縮放到碰撞箱高度。
+const SPRITE_SOURCE_HEIGHT := 128.0
+const INVINCIBLE_TINT := Color(1.35, 1.35, 1.45)
+const DAMAGED_TINT := Color(2.4, 1.2, 1.2)
 
 var hp := float(BossRules.MAX_HP)
 var half_height := BODY_SIZE.y * 0.5
+## Boss 也在 enemy 群組，所以玩家的踩踏判定會找上它；但它不是 Enemy，
+## 踩到是扣血不是消失。
+var kind := EnemyRules.KIND_BEAR
 
 var _direction := -1
 var _origin_x := 0.0
-var _throw_timer := THROW_INTERVAL
+var _throw_timer := BossRules.THROW_INTERVAL
 var _invincible_left := 0.0
 var _alive := true
 
@@ -35,12 +41,14 @@ func _ready() -> void:
 	_origin_x = global_position.x
 	(_shape.shape as RectangleShape2D).size = BODY_SIZE
 	_shape.position.y = -half_height
+	# 貼圖跟著碰撞箱一起放大，不然圖會浮在一個看不見的大箱子裡。
+	_sprite.scale = Vector2.ONE * (BODY_SIZE.y / SPRITE_SOURCE_HEIGHT)
 	_sprite.position.y = -half_height
+	health_changed.emit(BossRules.health_ratio(hp))
 
 
-## Boss 也算 enemy 群組，所以玩家的踩踏判定會找上它。
-## 但它不是 Enemy，踩踏後不該直接消失，而是扣血。
-var kind := EnemyRules.KIND_BEAR
+func is_alive() -> bool:
+	return _alive
 
 
 func _physics_process(delta: float) -> void:
@@ -48,18 +56,19 @@ func _physics_process(delta: float) -> void:
 		return
 
 	_invincible_left = maxf(0.0, _invincible_left - delta)
-	_sprite.modulate = Color(2, 2, 2) if _invincible_left > 0.0 else Color(1, 1, 1)
+	# 無敵期間偏灰、剛扣血時偏白，兩種命中的回饋不再長得一樣。
+	_sprite.modulate = INVINCIBLE_TINT if _invincible_left > 0.0 else Color(1, 1, 1)
 
-	velocity.y += GRAVITY * delta
-	if absf(global_position.x - _origin_x) > PATROL_HALF_WIDTH:
-		_direction = -1 if global_position.x > _origin_x else 1
-	velocity.x = _direction * WALK_SPEED
+	velocity.y = minf(velocity.y + BossRules.GRAVITY * delta,
+		EnemyRules.TERMINAL_FALL)
+	_direction = BossRules.patrol_direction(global_position.x, _origin_x, _direction)
+	velocity.x = _direction * BossRules.WALK_SPEED
 	_sprite.scale.x = absf(_sprite.scale.x) * (1.0 if _direction > 0 else -1.0)
 	move_and_slide()
 
 	_throw_timer -= delta
 	if _throw_timer <= 0.0:
-		_throw_timer = THROW_INTERVAL
+		_throw_timer = BossRules.THROW_INTERVAL
 		_throw_at_player()
 
 
@@ -68,8 +77,9 @@ func _throw_at_player() -> void:
 	if players.is_empty():
 		return
 	var origin := global_position + Vector2(0, -half_height * 1.4)
-	var to_player: Vector2 = players[0].global_position - Vector2(0, 60) - origin
-	spawned_projectile.emit(origin, to_player.normalized())
+	var target: Vector2 = players[0].global_position - BossRules.AIM_OFFSET
+	spawned_projectile.emit(origin,
+		BossRules.aim_velocity(origin, target, 1.0).normalized())
 
 
 ## 被踩。回傳是否真的吃到傷害（無敵中回 false，讓玩家還是會彈開但不扣血）。
@@ -82,10 +92,17 @@ func take_shot() -> bool:
 
 
 func _damage(new_hp: float) -> bool:
-	if not _alive or _invincible_left > 0.0:
+	if not _alive:
+		return false
+	if _invincible_left > 0.0:
+		# 打中了但沒吃到傷害。以前這裡和真的扣血一樣只有白閃，玩家分不出來，
+		# 於是會在無敵幀內連丟三枚金幣卻毫無效果，然後放棄金幣路線。
+		hit_absorbed.emit()
 		return false
 	hp = new_hp
+	health_changed.emit(BossRules.health_ratio(hp))
 	_invincible_left = BossRules.HIT_INVINCIBLE_TIME
+	_sprite.modulate = DAMAGED_TINT
 	var tween := create_tween()
 	tween.tween_property(_sprite, "scale:y", _sprite.scale.y * 0.8, 0.08)
 	tween.tween_property(_sprite, "scale:y", _sprite.scale.y, 0.14)
@@ -96,7 +113,9 @@ func _damage(new_hp: float) -> bool:
 
 func _die() -> void:
 	_alive = false
-	collision_layer = 0
+	remove_from_group("enemy")
+	# 只能延後改。_die 是在物理 in/out 訊號裡被同步呼叫的，直接賦值會被擋掉；
+	# 底下那行直接賦值是舊寫法的殘留，正是會出問題的那一行。
 	set_deferred("collision_layer", 0)
 	velocity = Vector2.ZERO
 	defeated.emit()

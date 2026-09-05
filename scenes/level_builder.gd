@@ -10,8 +10,9 @@ extends RefCounted
 ## 只有「站得住又不會互動」的格子進 TileMapLayer。問號磚、牛奶磚、可破磚
 ## 都得各自記住「被頂過了沒」，那是節點的工作，不是圖磚的工作。
 
-const TILE := 64
+const TILE := TileGlossary.SIZE
 const SOURCE_ID := 0
+const TILES_TEXTURE := preload("res://assets/tiles.png")
 
 const COIN_SCENE := preload("res://scenes/coin.tscn")
 const GOAL_SCENE := preload("res://scenes/goal_flag.tscn")
@@ -48,13 +49,21 @@ static func build_tileset() -> TileSet:
 	tile_set.set_physics_layer_collision_mask(0, 0)
 
 	var source := TileSetAtlasSource.new()
-	source.texture = load("res://assets/tiles.png")
+	# 貼圖載不到就用佔位圖降級，不要讓整個 _ready() 在下一行對 null 呼叫
+	# get_width() 而崩掉——那會停在全黑畫面，連 HUD 都建不起來。
+	var atlas: Texture2D = TILES_TEXTURE
+	if atlas == null:
+		push_error("圖磚貼圖載入失敗")
+		var placeholder := PlaceholderTexture2D.new()
+		placeholder.size = Vector2(TILE * 8, TILE)
+		atlas = placeholder
+	source.texture = atlas
 	source.texture_region_size = Vector2i(TILE, TILE)
 	# 先掛進 TileSet 再建圖磚。圖磚的實體層是從所屬 TileSet 繼承來的，
 	# 順序反過來的話 set_collision_polygon_points 會說 layer 0 越界。
 	tile_set.add_source(source, SOURCE_ID)
 
-	var columns := int(source.texture.get_width() / TILE)
+	var columns := maxi(1, int(source.texture.get_width() / TILE))
 	for column in columns:
 		var coords := Vector2i(column, 0)
 		source.create_tile(coords)
@@ -74,16 +83,35 @@ static func build_tileset() -> TileSet:
 
 ## 建構整張關卡。回傳 Main 需要知道的資訊。
 static func build(map: LevelMap, tile_layer: TileMapLayer,
-		entity_root: Node2D) -> Dictionary:
+		entity_root: Node2D) -> BuildResult:
+	build_terrain(map, tile_layer)
+	var built := build_entities(map, entity_root)
+	return BuildResult.make(cell_bottom(map.spawn), map.pixel_size(TILE), built)
+
+
+## 只建地形。
+##
+## 拆出來是因為地形沒有狀態——它不記得誰撿過什麼，所以重建是安全的。
+## 實體不一樣：撿過的金幣、頂過的磚、打死的敵人全是狀態，重建就等於復活。
+## 進出水管暗房時只重建地形、把實體整組移出場景樹再放回來，就不會有
+## 「往返一次全部復活」的無限刷分。
+static func build_terrain(map: LevelMap, tile_layer: TileMapLayer) -> void:
 	tile_layer.clear()
 	if tile_layer.tile_set == null:
 		tile_layer.tile_set = build_tileset()
-	# 先 remove_child 再 queue_free。queue_free 是延後執行的，只呼叫它的話
-	# 舊節點在這一幀還留在樹上，Main 接訊號時會連到已經作廢的節點，
-	# 第二次載入關卡就會噴「訊號已經連過了」。
-	for child in entity_root.get_children():
-		entity_root.remove_child(child)
-		child.queue_free()
+	for y in map.height:
+		for x in map.width:
+			var cell := Vector2i(x, y)
+			var kind := map.terrain_at(cell)
+			if BlockRules.needs_node(kind) or not TILEMAP_KINDS.has(kind):
+				continue
+			tile_layer.set_cell(cell, SOURCE_ID,
+				Vector2i(TileGlossary.atlas_column(kind), 0), 0)
+
+
+## 清空並重建實體，回傳生成了幾個。
+static func build_entities(map: LevelMap, entity_root: Node2D) -> int:
+	clear_entities(entity_root)
 
 	var built := 0
 	for y in map.height:
@@ -92,31 +120,33 @@ static func build(map: LevelMap, tile_layer: TileMapLayer,
 			var kind := map.terrain_at(cell)
 			if BlockRules.needs_node(kind):
 				var block := BLOCK_SCENE.instantiate()
-				block.setup(kind)
+				block.kind = kind
+				block.cell = cell
 				block.position = cell_center(cell)
 				entity_root.add_child(block)
 				built += 1
-				continue
-			if not TILEMAP_KINDS.has(kind):
-				continue
-			tile_layer.set_cell(cell, SOURCE_ID,
-				Vector2i(TileGlossary.atlas_column(kind), 0), 0)
-			if kind == TileGlossary.KIND_SPIKE:
+			elif kind == TileGlossary.KIND_SPIKE:
 				entity_root.add_child(_make_hazard(cell))
 				built += 1
 
+	# 掉到關卡下緣再一格就收掉，敵人才不會無限下墜而永不釋放。
+	var despawn_y := map.pixel_size(TILE).y + TILE
 	for entity in map.entities:
-		var node := _make_entity(entity)
+		var node := _make_entity(entity, despawn_y)
 		if node == null:
 			continue
 		entity_root.add_child(node)
 		built += 1
+	return built
 
-	return {
-		"spawn_position": cell_bottom(map.spawn),
-		"level_size": map.pixel_size(TILE),
-		"entities_built": built,
-	}
+
+## 先 remove_child 再 queue_free。queue_free 是延後執行的，只呼叫它的話
+## 舊節點在這一幀還留在樹上，Main 接訊號時會連到已經作廢的節點，
+## 第二次載入關卡就會噴「訊號已經連過了」。
+static func clear_entities(entity_root: Node2D) -> void:
+	for child in entity_root.get_children():
+		entity_root.remove_child(child)
+		child.queue_free()
 
 
 static func _make_hazard(cell: Vector2i) -> Area2D:
@@ -137,7 +167,7 @@ static func _make_hazard(cell: Vector2i) -> Area2D:
 	return area
 
 
-static func _make_entity(entity: Dictionary) -> Node2D:
+static func _make_entity(entity: Dictionary, despawn_y := INF) -> Node2D:
 	var type: String = entity["type"]
 	var cell: Vector2i = entity["cell"]
 
@@ -152,19 +182,20 @@ static func _make_entity(entity: Dictionary) -> Node2D:
 			return goal
 		"bear", "spikeball", "arrow":
 			var enemy := ENEMY_SCENE.instantiate()
-			enemy.setup(EnemyRules.kind_from_type(type))
+			enemy.kind = EnemyRules.kind_from_type(type)
+			enemy.despawn_y = despawn_y
 			# 刺球與箭頭懸空，站在格子中央；小熊站在格子底邊。
 			enemy.position = cell_bottom(cell) if type == "bear" \
 				else cell_center(cell)
 			return enemy
 		"platform_h", "platform_v":
 			var platform := PLATFORM_SCENE.instantiate()
-			platform.setup(type == "platform_v")
+			platform.vertical = type == "platform_v"
 			platform.position = cell_center(cell)
 			return platform
 		"pipe":
 			var pipe := PIPE_SCENE.instantiate()
-			pipe.setup(str(entity["params"].get("target", "")))
+			pipe.target = str(entity["params"].get("target", ""))
 			pipe.position = cell_center(cell)
 			return pipe
 		"checkpoint":

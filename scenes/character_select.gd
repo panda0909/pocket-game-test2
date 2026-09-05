@@ -37,7 +37,7 @@ func _build_slots() -> void:
 	_slots.clear()
 	for i in Roster.COUNT:
 		var slot := TextureRect.new()
-		slot.texture = load(Roster.texture_path(i))
+		slot.texture = Roster.texture(i)
 		slot.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		slot.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		slot.custom_minimum_size = Vector2(200, 260)
@@ -50,7 +50,10 @@ func _build_slots() -> void:
 
 func show_index(index: int) -> void:
 	_index = Roster.clamp_index(index)
-	_name_label.text = "◀　%s　▶" % Roster.name_of(_index)
+	# 名字底下寫一句這隻的特色。三隻有了各自的手感差異之後，
+	# 選角才是一個真的決策而不是純造型。
+	_name_label.text = "◀　%s　▶\n%s" % [
+		Roster.name_of(_index), Roster.traits(_index)["blurb"]]
 	for i in _slots.size():
 		var slot := _slots[i]
 		var chosen := i == _index
@@ -65,10 +68,14 @@ func show_index(index: int) -> void:
 ## 這樣它在其他流程狀態下不會偷吃按鍵。
 func handle_action(event: InputEvent) -> void:
 	if event.is_action_pressed("move_left"):
+		Audio.play("menu_move")
 		moved.emit(-1)
 	elif event.is_action_pressed("move_right"):
+		Audio.play("menu_move")
 		moved.emit(1)
 	elif event.is_action_pressed("jump"):
+		Audio.play("menu_confirm")
 		confirmed.emit()
 	elif event.is_action_pressed("duck"):
+		Audio.play("menu_move")
 		cancelled.emit()

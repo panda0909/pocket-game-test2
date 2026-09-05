@@ -4,13 +4,16 @@
 # 為什麼不直接呼叫 gut_cmdln.gd？因為 GUT 有兩個會讓測試靜靜爛掉的行為：
 #   1. 測試檔剖析失敗時，GUT 直接略過該檔，摘要仍顯示「All tests passed」
 #   2. 剖析錯誤不影響結束碼，CI 也不會擋下來
+#   3. 測試函式名字打錯（tets_ 而不是 test_）不會有任何抱怨，只是那個測試
+#      不存在了——而 loaded 仍然對得上、failing 仍然是 0
 # 所以這裡額外比對「GUT 實際載入的測試檔數」與「磁碟上存在的測試檔數」，
-# 對不上就視為失敗。
+# 並且要求「真的跑了測試」「沒有 pending」。對不上就視為失敗。
 
 set -uo pipefail
 
-GODOT="${GODOT:-/Users/hongming/Downloads/Godot.app/Contents/MacOS/Godot}"
 cd "$(dirname "$0")/.."
+# shellcheck source=tools/godot_env.sh
+. tools/godot_env.sh
 
 LOG=$(mktemp)
 trap 'rm -f "$LOG"' EXIT
@@ -30,11 +33,13 @@ expected=$(find test/unit -name 'test_*.gd' | wc -l | tr -d ' ')
 loaded=$(printf '%s\n' "$clean" | awk '/^Scripts +[0-9]+/ {print $2; exit}')
 passing=$(printf '%s\n' "$clean" | awk '/^Passing Tests +[0-9]+/ {print $3; exit}')
 failing=$(printf '%s\n' "$clean" | awk '/^Failing Tests +[0-9]+/ {print $3; exit}')
+pending=$(printf '%s\n' "$clean" | awk '/^Pending +[0-9]+/ {print $2; exit}')
 loaded=${loaded:-0}
 passing=${passing:-0}
 failing=${failing:-0}
+pending=${pending:-0}
 
-echo "測試檔 ${loaded}/${expected} 載入　通過 ${passing}　失敗 ${failing}"
+echo "測試檔 ${loaded}/${expected} 載入　通過 ${passing}　失敗 ${failing}　待處理 ${pending}"
 
 status=0
 
@@ -46,6 +51,18 @@ fi
 if [ "$loaded" -ne "$expected" ]; then
 	echo "失敗：有 $((expected - loaded)) 個測試檔沒有被載入（多半是剖析錯誤）"
 	printf '%s\n' "$clean" | grep -E "SCRIPT ERROR|Parse Error" | head -20
+	status=1
+fi
+
+# 沒有任何測試通過 = 一定有問題。把所有 test_ 打成 tets_ 的話，loaded 仍然
+# 對得上、failing 仍然是 0，舊版會印「全部通過」並 exit 0。
+if [ "$passing" -eq 0 ]; then
+	echo "失敗：一個測試都沒跑到（測試函式是不是打錯名字了？）"
+	status=1
+fi
+
+if [ "$pending" -ne 0 ]; then
+	echo "失敗：有 ${pending} 個測試被標成 pending，它們沒有真的驗到東西"
 	status=1
 fi
 

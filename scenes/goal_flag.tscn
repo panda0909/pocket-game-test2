@@ -10,12 +10,30 @@ script/source = "extends Area2D
 
 ## 終點旗竿。Boss 還活著時 Main 會把它關掉（見 set_active）。
 
+const LOCKED_TINT := Color(0.42, 0.46, 0.55)
+const OPEN_TINT := Color(1, 1, 1)
+## 終點要比中途的檢查點顯眼。兩者用同一張圖，而拿過的檢查點是全彩飽和的——
+## 以前終點在 Boss 沒死時只是半透明，看起來比檢查點還不起眼，玩家會把
+## 第一支檢查點當成終點，走到真的終點時反而以為那是沒畫完的背景。
+const GOAL_SCALE := Vector2(1.5, 1.5)
+
 func _ready() -> void:
 	add_to_group(\"goal\")
+	$Sprite.scale = GOAL_SCALE
+	$Sprite.offset = Vector2(0, -128)
 
 func set_active(active: bool) -> void:
-	monitorable = active
-	modulate.a = 1.0 if active else 0.45
+	# Boss 被金幣打死時，這裡是從 CoinShot 的 body_entered 訊號一路同步呼叫進來的，
+	# 直接改 monitorable 會被 Godot 擋掉，旗竿就永遠碰不到。延後到訊號結束再改。
+	set_deferred(\"monitorable\", active)
+	# 鎖住時整支變成灰的，不是變淡。灰＝這條路還沒開，淡＝畫壞了。
+	$Sprite.modulate = OPEN_TINT if active else LOCKED_TINT
+	if active:
+		var tween := create_tween()
+		tween.tween_property($Sprite, \"scale\", GOAL_SCALE * 1.2, 0.16)
+		var back := tween.tween_property($Sprite, \"scale\", GOAL_SCALE, 0.24)
+		back.set_trans(Tween.TRANS_BACK)
+		back.set_ease(Tween.EASE_OUT)
 "
 
 [node name="GoalFlag" type="Area2D"]
