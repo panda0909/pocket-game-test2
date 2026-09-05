@@ -31,10 +31,26 @@ const LABEL_COLOR := Color(1, 1, 1, 0.72)
 const FONT_PATH := "res://assets/fonts/NotoSansTC-Bold.subset.otf"
 
 
+## 只有在真的觸控裝置上，而且真的在玩的時候才顯示。
+##
+## 以前 visible 只在 _ready() 設一次，之後從不切換，而這一層的 layer 高於
+## 所有選單——標題、選角、暫停、結束畫面上都掛著七顆半透明圓圈，選角畫面的
+## 「丟」鍵直接壓在提示文字上，結束畫面的跳鍵範圍與「再玩一次」按鈕重疊。
+var _available := false
+
+
+## 標題與選角也要看得到按鍵——那兩個畫面都得靠「跳」鍵確定、靠「◀▶」
+## 換角色。只有在有自己按鈕的畫面（暫停、結束選單）才收起來，那裡的
+## 跳鍵範圍會壓到「再玩一次」按鈕上。
+func set_active(active: bool) -> void:
+	visible = _available and active
+
+
 func _ready() -> void:
 	layer = 4
-	visible = should_show()
-	if not visible:
+	_available = should_show()
+	visible = false
+	if not _available:
 		return
 	var painter := _Painter.new()
 	add_child(painter)

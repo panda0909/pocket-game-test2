@@ -49,6 +49,7 @@ var _level_broken := false
 @onready var _select: CharacterSelect = $CharacterSelect
 @onready var _end_menu: EndMenu = $EndMenu
 @onready var _pause_menu: PauseMenu = $PauseMenu
+@onready var _touch: TouchControls = $TouchControls
 
 
 func _ready() -> void:
@@ -372,11 +373,25 @@ func _physics_process(_delta: float) -> void:
 
 ## --- 流程 ---
 
+## 分頁被切走、視窗失焦時自動暫停。
+##
+## 通勤情境的中斷率接近 100%，而遊戲對中斷零防護：全靠 requestAnimationFrame
+## 停下來這個副作用，而那不是設計。玩家接完電話回來，運氣好停在原地，
+## 運氣不好整頁重載、8 分鐘白玩。
+func _notification(what: int) -> void:
+	if what != NOTIFICATION_APPLICATION_FOCUS_OUT \
+			and what != NOTIFICATION_WM_WINDOW_FOCUS_OUT:
+		return
+	if flow_state == Flow.PLAYING and not _pause_menu.visible and _pause_menu != null:
+		_pause_menu.open()
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	# 暫停優先。樹被暫停之後 Main 就收不到輸入了，繼續遊戲那一下由
 	# PauseMenu 自己處理（它的 process_mode 是 ALWAYS）。
 	if event.is_action_pressed("pause") and flow_state == Flow.PLAYING:
 		get_viewport().set_input_as_handled()
+		_touch.set_active(false)
 		_pause_menu.open()
 		return
 
@@ -394,6 +409,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _on_resumed() -> void:
+	_touch.set_active(true)
 	# 暫停選單吃掉了那一下按鍵，但玩家放開之前不該被當成新的輸入。
 	_player.begin_control()
 
@@ -474,6 +490,8 @@ func _enter_state(state: int, event := "") -> void:
 	_select.visible = state == Flow.SELECT
 	_end_menu.visible = state == Flow.GAME_OVER or state == Flow.CLEARED
 	_hud.set_stats_visible(state != Flow.TITLE and state != Flow.SELECT)
+	_touch.set_active(state == Flow.TITLE or state == Flow.SELECT
+		or state == Flow.PLAYING)
 	match state:
 		Flow.TITLE:
 			_hud.reset_cache()
@@ -532,7 +550,14 @@ func _throw_key_name() -> String:
 
 ## 標題畫面的第二行。有紀錄就先報紀錄——刷分要有對照組才有意義。
 func _title_subtitle() -> String:
-	var controls := "空白鍵開始　方向鍵／WASD 移動　空白／↑ 跳　Shift 衝刺　Z 丟金幣　↓ 進水管　ESC 暫停"
+	# 操作說明跟著輸入方式走。手機上沒有空白鍵，而以前標題、選角、暫停、
+	# 結束四個畫面的說明全是鍵盤——手機玩家在標題就得「猜」畫面右下那顆
+	# 半透明圓圈是開始鍵。
+	var controls := ""
+	if TouchControls.should_show():
+		controls = "按右下的「跳」開始　◀▶ 移動　衝／丟在右手邊　▼ 進水管"
+	else:
+		controls = "空白鍵開始　方向鍵／WASD 移動　空白／↑ 跳　Shift 衝刺　%s 丟金幣　↓ 進水管　ESC 暫停" % _throw_key_name()
 	if save.best_score <= 0:
 		return controls
 	var record := "最高分 %d　金幣 %d 枚" % [save.best_score, save.best_coins]

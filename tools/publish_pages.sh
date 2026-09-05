@@ -66,6 +66,13 @@ for required in index.html index.js index.wasm index.pck; do
 		exit 1
 	fi
 done
+# 載入進度文字與直向轉橫提示。找不到標記會 exit 1，發佈流程跟著停——
+# 靜靜地沒套用比壞掉還糟，那會變成「線上版少了一半改善而沒人知道」。
+echo
+echo "== 加上載入文字與直向提示 =="
+python3 tools/patch_web_shell.py "$WEB_DIR/index.html"
+
+echo
 echo "產物大小："
 du -h "$WEB_DIR"/index.{wasm,pck,js} | sed 's/^/  /'
 
