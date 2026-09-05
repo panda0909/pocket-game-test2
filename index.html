@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0">
+		<title>口袋牛牛大冒險</title>
+		<style>
+html, body, #canvas {
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+
+body {
+	color: white;
+	background-color: black;
+	overflow: hidden;
+	touch-action: none;
+}
+
+#canvas {
+	display: block;
+}
+
+#canvas:focus {
+	outline: none;
+}
+
+#status, #status-splash, #status-progress {
+	position: absolute;
+	left: 0;
+	right: 0;
+}
+
+#status, #status-splash {
+	top: 0;
+	bottom: 0;
+}
+
+#status {
+	background-color: #0e1117;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	align-items: center;
+	visibility: hidden;
+}
+
+#status-splash {
+	max-height: 100%;
+	max-width: 100%;
+	margin: auto;
+}
+
+#status-splash.show-image--false {
+	display: none;
+}
+
+#status-splash.fullsize--true {
+	height: 100%;
+	width: 100%;
+	object-fit: contain;
+}
+
+#status-splash.use-filter--false {
+	image-rendering: pixelated;
+}
+
+#status-progress, #status-notice {
+	display: none;
+}
+
+#status-progress {
+	bottom: 10%;
+	width: 50%;
+	margin: 0 auto;
+}
+
+#status-notice {
+	background-color: #5b3943;
+	border-radius: 0.5rem;
+	border: 1px solid #9b3943;
+	color: #e0e0e0;
+	font-family: 'Noto Sans', 'Droid Sans', Arial, sans-serif;
+	line-height: 1.3;
+	margin: 0 2rem;
+	overflow: hidden;
+	padding: 1rem;
+	text-align: center;
+	z-index: 1;
+}
+		
+/* --- 以下由 tools/patch_web_shell.py 加入 --- */
+#loading-title {
+	position: absolute; top: 62%; left: 0; right: 0;
+	text-align: center; color: #eef4fa; z-index: 2;
+	font-family: system-ui, -apple-system, "PingFang TC", "Microsoft JhengHei", sans-serif;
+	font-size: 22px; font-weight: 700; letter-spacing: .02em;
+	text-shadow: 0 2px 8px rgba(0,0,0,.6);
+	pointer-events: none;
+}
+#loading-title small {
+	display: block; margin-top: 8px;
+	font-size: 14px; font-weight: 400; color: #a9bccc; letter-spacing: .04em;
+}
+#status.hidden-status #loading-title { display: none; }
+
+/* 直向遮罩。純 CSS media query，不必碰 Godot。 */
+#rotate-hint {
+	display: none;
+	position: fixed; inset: 0; z-index: 100;
+	background: #0d1117; color: #eef4fa;
+	flex-direction: column; align-items: center; justify-content: center;
+	gap: 22px; text-align: center; padding: 24px;
+	font-family: system-ui, -apple-system, "PingFang TC", "Microsoft JhengHei", sans-serif;
+}
+#rotate-hint .glyph {
+	font-size: 68px; line-height: 1;
+	animation: rotate-nudge 2.2s ease-in-out infinite;
+}
+#rotate-hint .line { font-size: 20px; font-weight: 700; }
+#rotate-hint .sub { font-size: 14px; color: #a9bccc; max-width: 22em; line-height: 1.7; }
+@keyframes rotate-nudge {
+	0%, 45%, 100% { transform: rotate(0deg); }
+	60%, 85%      { transform: rotate(90deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+	#rotate-hint .glyph { animation: none; }
+}
+/* 只在「直向」且「螢幕不夠寬」時擋。桌面把視窗拉窄不該被擋住。 */
+@media (orientation: portrait) and (max-width: 900px) {
+	#rotate-hint { display: flex; }
+}
+</style>
+		<link id="-gd-engine-icon" rel="icon" type="image/png" href="index.icon.png" />
+<link rel="apple-touch-icon" href="index.apple-touch-icon.png"/>
+<meta property="og:type" content="website"><meta property="og:site_name" content="口袋"><meta property="og:title" content="口袋牛牛大冒險"><meta property="og:description" content="跌停箭頭會俯衝、盤面刺球踩不得，喝下漲停牛奶才變得夠大。挑一隻口袋吉祥物，走完 300 格的盤面大道。免安裝，手機也能玩。"><meta property="og:url" content="https://panda0909.github.io/pocket-game-test2/"><meta property="og:image" content="https://panda0909.github.io/pocket-game-test2/share_cover.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta name="twitter:card" content="summary_large_image">
+	</head>
+	<body>
+		<canvas id="canvas">
+			Your browser does not support the canvas tag.
+		</canvas>
+
+		<noscript>
+			Your browser does not support JavaScript.
+		</noscript>
+
+		<div id="rotate-hint">
+			<div class="glyph">📱</div>
+			<div class="line">請把手機轉成橫向</div>
+			<div class="sub">這是一款橫向捲軸遊戲，直向時畫面會被壓成一條細長條，
+			虛擬按鍵也會小到按不準。</div>
+		</div>
+<div id="status">
+			<img id="status-splash" class="show-image--true fullsize--false use-filter--true" src="index.png" alt="">
+			<progress id="status-progress"></progress>
+			<div id="status-notice"></div>
+			<div id="loading-title">口袋牛牛大冒險<small id="loading-pct">載入中…</small></div>
+
+		</div>
+
+		
+<script>
+// --- 由 tools/patch_web_shell.py 加入 ---
+//
+// 遊戲會在六個時間點呼叫 window.pocketGameEvent(name, props)：
+//
+//   loaded               撐過載入、看到標題畫面      { touch }
+//   start_pressed        按下開始
+//   character_confirmed  選好角色                   { index }
+//   checkpoint           走到檢查點                 { cell }
+//   cleared              通關    { score, coins, collect_pct, time_left, flawless, cell }
+//   game_over            三條命用完                 （同上）
+//   share_clicked        按了分享                   { platform }
+//
+// 這六個事件就能畫出完整的漏斗：多少人撐過載入、多少人真的開始玩、
+// 卡在第幾格、多少人通關、多少人分享。
+//
+// 預設什麼都不做——埋點會把資料送出使用者的瀏覽器，那是需要專案擁有者
+// 明確同意的決定，不是可以預設開啟的功能。要接的話取消底下其中一段的
+// 註解，或自己寫。遊戲端已經保證只會送出白名單裡的欄位、而且值只有
+// 數字或短字串（見 scripts/telemetry_events.gd）。
+window.pocketGameEvent = function (name, props) {
+	// 開發時想看事件流，取消這一行的註解：
+	// console.log('[pocket]', name, props);
+
+	// --- Plausible（自架或雲端；把 script 標籤加到 <head> 之後）---
+	// if (window.plausible) { window.plausible(name, { props: props }); }
+
+	// --- GA4（先載入 gtag.js 並設定好評估 ID）---
+	// if (window.gtag) { window.gtag('event', name, props); }
+};
+</script>
+		<script src="index.js"></script>
+		<script>
+const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":false,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":1544476,"index.wasm":39514754},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4};
+const GODOT_THREADS_ENABLED = false;
+const engine = new Engine(GODOT_CONFIG);
+
+(function () {
+	const statusOverlay = document.getElementById('status');
+	const statusProgress = document.getElementById('status-progress');
+	const statusNotice = document.getElementById('status-notice');
+
+	let initializing = true;
+	let statusMode = '';
+
+	function setStatusMode(mode) {
+		if (statusMode === mode || !initializing) {
+			return;
+		}
+		if (mode === 'hidden') {
+			statusOverlay.remove();
+			initializing = false;
+			return;
+		}
+		statusOverlay.style.visibility = 'visible';
+		statusProgress.style.display = mode === 'progress' ? 'block' : 'none';
+		statusNotice.style.display = mode === 'notice' ? 'block' : 'none';
+		statusMode = mode;
+	}
+
+	function setStatusNotice(text) {
+		while (statusNotice.lastChild) {
+			statusNotice.removeChild(statusNotice.lastChild);
+		}
+		const lines = text.split('\n');
+		lines.forEach((line) => {
+			statusNotice.appendChild(document.createTextNode(line));
+			statusNotice.appendChild(document.createElement('br'));
+		});
+	}
+
+	function displayFailureNotice(err) {
+		console.error(err);
+		if (err instanceof Error) {
+			setStatusNotice(err.message);
+		} else if (typeof err === 'string') {
+			setStatusNotice(err);
+		} else {
+			setStatusNotice('An unknown error occurred.');
+		}
+		setStatusMode('notice');
+		initializing = false;
+	}
+
+	const missing = Engine.getMissingFeatures({
+		threads: GODOT_THREADS_ENABLED,
+	});
+
+	if (missing.length !== 0) {
+		if (GODOT_CONFIG['serviceWorker'] && GODOT_CONFIG['ensureCrossOriginIsolationHeaders'] && 'serviceWorker' in navigator) {
+			let serviceWorkerRegistrationPromise;
+			try {
+				serviceWorkerRegistrationPromise = navigator.serviceWorker.getRegistration();
+			} catch (err) {
+				serviceWorkerRegistrationPromise = Promise.reject(new Error('Service worker registration failed.'));
+			}
+			// There's a chance that installing the service worker would fix the issue
+			Promise.race([
+				serviceWorkerRegistrationPromise.then((registration) => {
+					if (registration != null) {
+						return Promise.reject(new Error('Service worker already exists.'));
+					}
+					return registration;
+				}).then(() => engine.installServiceWorker()),
+				// For some reason, `getRegistration()` can stall
+				new Promise((resolve) => {
+					setTimeout(() => resolve(), 2000);
+				}),
+			]).then(() => {
+				// Reload if there was no error.
+				window.location.reload();
+			}).catch((err) => {
+				console.error('Error while registering service worker:', err);
+			});
+		} else {
+			// Display the message as usual
+			const missingMsg = 'Error\nThe following features required to run Godot projects on the Web are missing:\n';
+			displayFailureNotice(missingMsg + missing.join('\n'));
+		}
+	} else {
+		setStatusMode('progress');
+		engine.startGame({
+			'onProgress': function (current, total) {
+				if (current > 0 && total > 0) {
+					statusProgress.value = current;
+					statusProgress.max = total;
+					const pct = Math.round((current / total) * 100);
+					const label = document.getElementById('loading-pct');
+					if (label) {
+						label.textContent = '載入中 ' + pct + '%　約 '
+							+ (total / 1048576).toFixed(0) + ' MB';
+					}
+				} else {
+					statusProgress.removeAttribute('value');
+					statusProgress.removeAttribute('max');
+				}
+			},
+		}).then(() => {
+			setStatusMode('hidden');
+		}, displayFailureNotice);
+	}
+}());
+		</script>
+	</body>
+</html>
+
