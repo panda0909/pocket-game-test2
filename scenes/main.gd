@@ -416,7 +416,7 @@ func _enter_state(state: int, event := "") -> void:
 ## 把這一局記進最高分紀錄。
 ## 標題畫面的第二行。有紀錄就先報紀錄——刷分要有對照組才有意義。
 func _title_subtitle() -> String:
-	var controls := "空白鍵開始　方向鍵／WASD 移動　空白／↑ 跳　Shift 衝刺　J 丟金幣　↓ 進水管　ESC 暫停"
+	var controls := "空白鍵開始　方向鍵／WASD 移動　空白／↑ 跳　Shift 衝刺　Z 丟金幣　↓ 進水管　ESC 暫停"
 	if save.best_score <= 0:
 		return controls
 	var record := "最高分 %d　金幣 %d 枚" % [save.best_score, save.best_coins]

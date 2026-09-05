@@ -73,7 +73,7 @@ jump={
 
 throw={
 "deadzone": 0.2,
-"events": [Object(InputEventKey,"physical_keycode":74,"pressed":false,"echo":false,"script":null)
+"events": [Object(InputEventKey,"physical_keycode":90,"pressed":false,"echo":false,"script":null)
 , Object(InputEventJoypadButton,"button_index":2,"pressure":0.0,"pressed":false,"script":null)
 ]
 }
