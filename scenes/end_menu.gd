@@ -14,7 +14,9 @@ const LABELS := ["分享到 Facebook", "分享到 Threads", "複製成績文字"
 const DEFAULT_ACTION := "again"
 
 const SELECTED_TINT := Color(1, 1, 1)
-const IDLE_TINT := Color(0.62, 0.67, 0.76)
+## 沒選到的按鈕只是「不是現在這顆」，不是「不能按」。壓太暗的話五顆裡有
+## 四顆看起來像停用——而它們全都是可以按的。
+const IDLE_TINT := Color(0.86, 0.89, 0.94)
 
 ## 程式建立的 Button 用的是 Godot 內建字型，那套沒有中文字形，
 ## 選單文字會變成一排方塊。Label 有 label_settings 指定字型，Button 得自己覆寫。
@@ -29,7 +31,7 @@ var _buttons: Array[Button] = []
 @onready var _share_preview: TextureRect = $Panel/SharePreview
 @onready var _row: HBoxContainer = $Panel/Row
 @onready var _note: Label = $Panel/Note
-@onready var _detail: Label = $Panel/Detail
+@onready var _hint: Label = $Panel/Hint
 
 
 func _ready() -> void:
@@ -58,16 +60,25 @@ func _build_buttons() -> void:
 ## （分數、金幣、收集率、無傷），再往上加就會變成一長串參數。
 func show_result(cleared: bool, stats: RunStats) -> void:
 	_title.text = "通關！" if cleared else "遊戲結束"
-	_score.text = "分數 %d　　金幣 %d 枚" % [stats.score, stats.found["coin"]]
+	# 成績卡上已經有完整數字了，這一行是它的文字版——卡片萬一畫不出來
+	# （渲染器拿不到畫面）玩家還是看得到成績。
+	#
 	# 收集率與無傷是給第二輪、第三輪的理由。第一次通關看到「收集率 58%」
 	# 才會知道自己漏了什麼。
-	var marks: Array[String] = ["收集率 %d%%" % stats.collect_percent()]
+	var marks: Array[String] = [
+		"分數 %d" % stats.score,
+		"金幣 %d 枚" % stats.found["coin"],
+		"收集率 %d%%" % stats.collect_percent(),
+	]
 	if cleared and stats.flawless:
-		marks.append("全程無傷")
-	_detail.text = "　　".join(marks)
+		marks.append("★ 全程無傷")
+	_score.text = "　　".join(marks)
 	_share_preview.tooltip_text = "這張成績卡就是你這一局的紀錄，存下來可以貼到 IG"
 	_note.text = ""
 	_index = ACTIONS.find(DEFAULT_ACTION)
+	# 手機上沒有方向鍵也沒有空白鍵——這五顆按鈕本來就點得到。
+	_hint.text = "點一下就好" if TouchControls.should_show() \
+		else "←→ 選擇　　空白鍵確定"
 	_refresh()
 
 
@@ -121,4 +132,6 @@ func _refresh() -> void:
 	for i in _buttons.size():
 		var chosen_now := i == _index
 		_buttons[i].modulate = SELECTED_TINT if chosen_now else IDLE_TINT
-		_buttons[i].scale = Vector2(1.0, 1.0) if chosen_now else Vector2(0.94, 0.94)
+		# 選到的那顆靠大小與亮度一起說話，不要只靠亮度——只靠亮度的話
+		# 「沒選到」和「不能按」在視覺上是同一件事。
+		_buttons[i].scale = Vector2(1.0, 1.0) if chosen_now else Vector2(0.92, 0.92)

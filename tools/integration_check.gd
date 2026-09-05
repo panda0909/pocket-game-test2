@@ -67,6 +67,7 @@ func _ready() -> void:
 	await _check_flawless_survives_respawn()
 	await _check_end_menu_shows_collection()
 	await _check_telemetry_rejects_unknown_events()
+	await _check_starting_coins_follow_the_chosen_character()
 
 	print("---")
 	# 檢查總數也要守。單看「失敗 0」看不出有沒有檢查憑空消失——
@@ -1365,4 +1366,38 @@ func _check_telemetry_rejects_unknown_events() -> void:
 	# headless 不是網頁，所以就算名稱正確也不會真的送
 	_expect(not Telemetry.send(TelemetryEvents.LOADED),
 		"非網頁環境不送埋點")
+	await get_tree().process_frame
+
+
+## 開局金幣要照玩家「真正選到」的角色發，不是標題畫面時的預設值。
+##
+## 以前在 _load_level 裡發，而那是 _enter_state(TITLE) 就跑過的——玩家接著
+## 進選角畫面換成別隻，換到的角色特性根本沒生效。畫面上的症狀是 HUD 的
+## 金幣數比成績卡多，因為 coins 被多發了而 found 沒有。
+func _check_starting_coins_follow_the_chosen_character() -> void:
+	var main := await _make_main()
+	# 紅牛（index 0）開局 +2、綠恐龍（index 1）開局 0
+	var bull: int = int(Roster.traits(0)["start_coins"])
+	var dino: int = int(Roster.traits(1)["start_coins"])
+	_expect(bull != dino, "兩隻角色的開局金幣不同才驗得出來",
+		"紅牛 %d、綠恐龍 %d" % [bull, dino])
+
+	main.begin_game(1)
+	await get_tree().physics_frame
+	_expect(main.stats.coins == dino,
+		"選綠恐龍就拿綠恐龍的開局金幣",
+		"拿到 %d 枚，應該是 %d 枚" % [main.stats.coins, dino])
+	_expect(main.stats.coins == main.stats.found["coin"] + dino,
+		"HUD 的金幣數與成績卡的收集數對得起來",
+		"coins=%d found=%d" % [main.stats.coins, main.stats.found["coin"]])
+	main.queue_free()
+	await get_tree().process_frame
+
+	var again := await _make_main()
+	again.begin_game(0)
+	await get_tree().physics_frame
+	_expect(again.stats.coins == bull,
+		"選紅牛就拿紅牛的開局金幣",
+		"拿到 %d 枚，應該是 %d 枚" % [again.stats.coins, bull])
+	again.queue_free()
 	await get_tree().process_frame

@@ -92,8 +92,6 @@ func _load_level(path: String, spawn_override := Vector2.INF,
 	# 分數與計時活在 Main，不隨關卡重建——進暗房不該把時間洗掉。
 	if not keep_stats:
 		stats = RunStats.new(_map.time_limit)
-		stats.grant_starting_coins(
-			int(Roster.traits(character_index)["start_coins"]))
 		_apply_collect_targets(map)
 	# 暗房沒有 S，關卡起點沿用主關卡的，回來時才找得到路。
 	if not _map.is_room:
@@ -106,6 +104,17 @@ func _load_level(path: String, spawn_override := Vector2.INF,
 	_player.set_camera_bounds(result.level_size)
 	_connect_level_nodes()
 	return true
+
+
+## 發角色的開局金幣。
+##
+## 一定要在玩家「真的選好」之後才發，不能在載入關卡時發——_load_level 在
+## _enter_state(TITLE) 就跑過了，那時 character_index 還是上一次的值。玩家
+## 接著進選角畫面換成別隻，換到的角色特性根本沒生效。畫面上的症狀是 HUD 的
+## 金幣數比成績卡多，因為 coins 被多發了而 found 沒有。
+func _grant_character_bonus() -> void:
+	stats.grant_starting_coins(
+		int(Roster.traits(character_index)["start_coins"]))
 
 
 ## 收集率的分母：主關卡加上它指向的每一間暗房。
@@ -561,7 +570,9 @@ func _enter_state(state: int, event := "") -> void:
 		_player.control_enabled = false
 	_select.visible = state == Flow.SELECT
 	_end_menu.visible = state == Flow.GAME_OVER or state == Flow.CLEARED
-	_hud.set_stats_visible(state != Flow.TITLE and state != Flow.SELECT)
+	# 結束畫面自己就有完整成績，上面那排數值只會和它打架——而且兩邊的
+	# 金幣算法不同（HUD 是手上剩的彈藥，成績卡是撿過幾枚）。
+	_hud.set_stats_visible(state == Flow.PLAYING)
 	_touch.set_active(state == Flow.TITLE or state == Flow.SELECT
 		or state == Flow.PLAYING)
 	match state:
@@ -585,12 +596,15 @@ func _enter_state(state: int, event := "") -> void:
 			if (event == Flow.CONFIRM or event == Flow.AGAIN) \
 					and _map != null and not _map.level_name.is_empty():
 				_hud.flash_hint(_map.level_name)
+			if event == Flow.CONFIRM:
+				_grant_character_bonus()
 			if event == Flow.DIED:
 				_respawn()
 			elif event == Flow.AGAIN:
 				# 一鍵重來：沿用同一隻角色，不再繞回標題與選角。
 				_hud.reset_cache()
 				_restart_run()
+				_grant_character_bonus()
 				_player.respawn_at(_respawn_position())
 		Flow.GAME_OVER:
 			Audio.stop_music()
