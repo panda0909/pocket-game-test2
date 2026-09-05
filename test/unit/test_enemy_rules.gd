@@ -104,3 +104,16 @@ func test_dive_velocity_keeps_constant_speed() -> void:
 	for target in [Vector2(3, 4), Vector2(-40, 900), Vector2(0.0001, 0)]:
 		var v := EnemyRules.dive_velocity(Vector2.ZERO, target)
 		assert_almost_eq(v.length(), EnemyRules.ARROW_DIVE_SPEED, 0.01)
+
+
+# --- 體型 ---
+# 這份尺寸以前留在 enemy.gd 裡，關卡的幾何驗收問不到——而「踩上去能彈多高」
+# 正是關卡排版要問的問題。
+
+func test_every_kind_has_a_body() -> void:
+	for kind in [EnemyRules.KIND_BEAR, EnemyRules.KIND_SPIKEBALL,
+			EnemyRules.KIND_ARROW]:
+		assert_gt(EnemyRules.body_height(kind), 0.0)
+
+func test_unknown_kind_falls_back_to_a_sane_size() -> void:
+	assert_gt(EnemyRules.body_height(999), 0.0, "認不得的種類也不能回 0")

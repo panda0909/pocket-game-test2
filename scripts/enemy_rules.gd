@@ -37,6 +37,15 @@ const TERMINAL_FALL := 900.0
 ## 誤判成踩。12 px 約是敵人身高的四分之一。
 const STOMP_TOLERANCE := 12.0
 
+## 各種敵人的碰撞箱。半高是踩踏判定要用的，而「踩上去能彈多高」是關卡
+## 排版要問的問題——所以這份尺寸屬於規則層，不是節點層。以前它留在
+## enemy.gd 裡，關卡的幾何驗收就問不到。
+const _BODY := {
+	KIND_BEAR: Vector2(44, 50),
+	KIND_SPIKEBALL: Vector2(46, 46),
+	KIND_ARROW: Vector2(40, 44),
+}
+
 const _STOMPABLE := [KIND_BEAR, KIND_ARROW]
 
 const _SPEED := {
@@ -65,6 +74,14 @@ const _SCORE := {
 	KIND_SPIKEBALL: 200,
 	KIND_ARROW: 150,
 }
+
+
+static func body_size(kind: int) -> Vector2:
+	return _BODY.get(kind, Vector2(44, 44))
+
+
+static func body_height(kind: int) -> float:
+	return body_size(kind).y
 
 
 static func is_stompable(kind: int) -> bool:

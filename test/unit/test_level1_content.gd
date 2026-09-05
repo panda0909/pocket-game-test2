@@ -76,7 +76,9 @@ func test_no_gap_is_wider_than_four_cells_on_any_walkable_row() -> void:
 		var first := _first_solid_x(y)
 		var last := _last_solid_x(y)
 		for x in range(first, last + 1):
-			if TileGlossary.is_solid(m.terrain_at(Vector2i(x, y))):
+			# 坑上方有踏腳石就把這一格當成有落腳點——玩家分兩跳過得去。
+			if TileGlossary.is_solid(m.terrain_at(Vector2i(x, y))) \
+					or _has_stepping_stone(x, y):
 				run = 0
 				continue
 			run += 1
@@ -84,7 +86,8 @@ func test_no_gap_is_wider_than_four_cells_on_any_walkable_row() -> void:
 				worst = run
 				worst_x = x
 		assert_lte(worst, 4,
-			"第 %d 列第 %d 格附近的坑有 %d 格寬，跳不過去" % [y, worst_x, worst])
+			"第 %d 列第 %d 格附近的坑有 %d 格寬，中間也沒有踏腳石"
+				% [y, worst_x, worst])
 	assert_gt(rows_checked, 1, "應該掃到不只一列")
 
 ## 這一列算不算「連續地面」。
@@ -133,6 +136,7 @@ func test_has_at_least_two_checkpoints() -> void:
 ## 一個 1280 px 畫面剛好 20 格。整整一個畫面除了平地什麼都沒有的話，
 ## 玩家在那一段只是按住右鍵等待。
 const SCREEN_CELLS := 20
+const TILE := LevelBuilder.TILE
 
 func test_no_screen_is_completely_empty() -> void:
 	var interest: Array[int] = []
@@ -170,3 +174,37 @@ func test_goal_follows_the_boss_closely() -> void:
 	assert_lte(goal_x - boss_x, SCREEN_CELLS,
 		"Boss 在第 %d 格、旗竿在第 %d 格，中間隔了 %d 格空地"
 			% [boss_x, goal_x, goal_x - boss_x])
+
+
+## 這一格的上方有沒有跳得上去的踏腳石。
+##
+## 六格坑加一顆石頭是刻意的：走路的滿跳只有 5.1 格，衝刺是 7.65 格——
+## 那是全關唯一一個「走路過不去、衝刺過得去」的地方，也是四個手感機制
+## 裡唯一真的被關卡用到的一個。石頭讓不按 Shift 的玩家分兩跳過去。
+func _has_stepping_stone(x: int, row: int) -> bool:
+	for above in range(row - 1, -1, -1):
+		if not TileGlossary.is_solid(m.terrain_at(Vector2i(x, above))):
+			continue
+		# 石頭要低到從坑兩側的地面跳得上去
+		return float(row - above) * TILE <= PlayerPhysics.jump_height()
+	return false
+
+
+## 全關至少要有一個地方讓衝刺真的有意義，否則那個機制等於不存在。
+func test_at_least_one_gap_needs_sprinting() -> void:
+	var floor_row := m.height - 1
+	var widest := 0
+	var run := 0
+	for x in m.width:
+		if TileGlossary.is_solid(m.terrain_at(Vector2i(x, floor_row))):
+			run = 0
+			continue
+		run += 1
+		widest = maxi(widest, run)
+	var walk := PlayerPhysics.jump_distance(PlayerPhysics.MAX_RUN_SPEED) / TILE
+	var sprint := PlayerPhysics.jump_distance(PlayerPhysics.SPRINT_SPEED) / TILE
+	assert_gt(float(widest), walk,
+		"最寬的坑 %d 格，走路的 %.1f 格就跳得過——衝刺在整張圖裡沒有用武之地"
+			% [widest, walk])
+	assert_lt(float(widest), sprint,
+		"最寬的坑 %d 格超過衝刺的 %.1f 格，那就沒有人過得去了" % [widest, sprint])

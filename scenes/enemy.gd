@@ -8,13 +8,6 @@ extends CharacterBody2D
 
 const DEATH_TIME := 0.22
 
-## 各種敵人的碰撞箱與半高。半高是踩踏判定要用的，所以和貼圖尺寸綁在一起。
-const _BODY := {
-	EnemyRules.KIND_BEAR: Vector2(44, 50),
-	EnemyRules.KIND_SPIKEBALL: Vector2(46, 46),
-	EnemyRules.KIND_ARROW: Vector2(40, 44),
-}
-
 ## 用 @export 而不是自製的 setup()：賦值時機完全一樣（instantiate 之後、
 ## 進樹之前），但 @export 額外換來編輯器面板可調、.tscn 存得了預設值、
 ## 型別受檢。以前那套 setup() 只是把 @export 手工重寫一遍，代價是每個
@@ -45,7 +38,7 @@ func _ready() -> void:
 	add_to_group("enemy")
 	_home_y = global_position.y
 
-	var size: Vector2 = _BODY.get(kind, Vector2(44, 44))
+	var size := EnemyRules.body_size(kind)
 	half_height = size.y * 0.5
 	(_shape.shape as RectangleShape2D).size = size
 	_shape.position.y = -half_height

@@ -36,7 +36,12 @@ const TERMINAL_FALL := 900.0
 const COYOTE_TIME := 0.10
 const JUMP_BUFFER := 0.12
 const STOMP_BOUNCE := -480.0
-const STOMP_BOUNCE_HELD := -640.0
+## 按住跳鍵踩敵人的回彈。
+##
+## 一定要爬得比滿跳（236 px）高，否則「連踩爬高」在物理上不可能——舊值 -640
+## 的回彈高度只有 186 px，踩敵人反而比自己跳還矮，那條規則等於不存在。
+## -780 換算是 276 px，比滿跳高 40 px，剛好夠踩一下上一層。
+const STOMP_BOUNCE_HELD := -780.0
 
 
 ## 推進一幀。
@@ -113,6 +118,12 @@ static func facing_from_velocity(horizontal_speed: float, current_facing: int) -
 
 static func stomp_velocity(jump_held: bool) -> float:
 	return STOMP_BOUNCE_HELD if jump_held else STOMP_BOUNCE
+
+
+## 踩踏回彈的最大高度。關卡排版與測試用它判斷「踩上去搆不搆得到」。
+static func stomp_height(jump_held: bool) -> float:
+	var v := stomp_velocity(jump_held)
+	return (v * v) / (2.0 * GRAVITY_RISE)
 
 
 ## 理論最大跳躍高度，供關卡排版與測試對照設計值。

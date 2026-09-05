@@ -260,3 +260,31 @@ func test_turning_around_is_faster_than_releasing_and_repressing() -> void:
 func test_turning_around_is_not_sluggish() -> void:
 	assert_lt(_turn_time(PlayerPhysics.SPRINT_SPEED), 0.40,
 		"從衝刺速度迴轉不該超過 0.4 秒")
+
+
+# --- 連踩爬高 ---
+# 按住跳鍵踩敵人要真的爬得比自己跳還高，否則「連踩」在物理上不可能——
+# 舊值 -640 的回彈高度是 186 px，比 236 px 的跳躍還矮，踩敵人反而往下走。
+
+func test_stomp_with_jump_held_climbs_higher_than_a_normal_jump() -> void:
+	assert_gt(PlayerPhysics.stomp_height(true), PlayerPhysics.jump_height(),
+		"按住跳鍵踩踏要爬得比滿跳高，連踩爬高才成立")
+
+func test_stomp_without_holding_is_a_short_hop() -> void:
+	assert_lt(PlayerPhysics.stomp_height(false), PlayerPhysics.jump_height(),
+		"不按住的踩踏只是小跳，這樣兩者才有差別")
+
+func test_stomp_height_matches_the_velocity() -> void:
+	var v := PlayerPhysics.stomp_velocity(true)
+	assert_almost_eq(PlayerPhysics.stomp_height(true),
+		v * v / (2.0 * PlayerPhysics.GRAVITY_RISE), 0.01)
+
+
+# --- 衝刺要能一口氣飛過走路過不去的坑 ---
+
+func test_sprint_clears_a_gap_that_walking_cannot() -> void:
+	var walk := PlayerPhysics.jump_distance(PlayerPhysics.MAX_RUN_SPEED)
+	var sprint := PlayerPhysics.jump_distance(PlayerPhysics.SPRINT_SPEED)
+	var six_cells := 6.0 * LevelBuilder.TILE
+	assert_lt(walk, six_cells, "走路跳不過六格")
+	assert_gt(sprint, six_cells, "衝刺跳得過六格")

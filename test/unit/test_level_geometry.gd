@@ -140,9 +140,14 @@ func test_no_brick_shelf_edge_overhangs_a_pit() -> void:
 				var right_open := not _is_brick(m, x + 1, y)
 				if not (left_open or right_open):
 					continue
+				# 只有「站上去看不到底」才算陷阱。離地一格的踏腳石，坑就在
+				# 眼前——那是設計，不是騙人。真正危險的是站在高處時相機
+				# 被夾住、關卡底部完全在畫面外的那種。
+				if _floor_is_visible_from(m, y):
+					continue
 				assert_false(_column_is_a_pit(m, x, y),
-					"%s 第 (%d, %d) 是磚台邊緣，正下方卻是坑——玩家看不到就會摔死"
-						% [path, x, y])
+					("%s 第 (%d, %d) 是磚台邊緣、正下方是坑，而站在那個高度時"
+					+ "關卡底部在畫面外——玩家看不到就會摔死") % [path, x, y])
 
 func _is_brick(m: LevelMap, x: int, y: int) -> bool:
 	return m.terrain_at(Vector2i(x, y)) == TileGlossary.KIND_BRICK
@@ -207,6 +212,21 @@ func _standing_surfaces(m: LevelMap) -> Array:
 			if TileGlossary.is_solid(m.terrain_at(Vector2i(x, y - 1))):
 				continue
 			out.append({"x": x, "y": float(y) * TILE})
+	# 可踩的敵人也是一種「站立面」——按住跳鍵踩下去會彈得比滿跳還高，
+	# 那是關卡拿來藏獎勵的合法手段。少了這一項，只有踩得到的金幣會被
+	# 誤判成拿不到。
+	for entity in m.entities:
+		var kind := EnemyRules.kind_from_type(entity["type"])
+		if kind < 0 or not EnemyRules.is_stompable(kind):
+			continue
+		var cell: Vector2i = entity["cell"]
+		# 小熊站在格子底邊，其他懸空的站在格子中心
+		var feet := float(cell.y + 1) * TILE if entity["type"] == "bear" \
+			else float(cell.y) * TILE + TILE * 0.5
+		var head := feet - EnemyRules.body_height(kind)
+		out.append({"x": cell.x, "y": head - PlayerPhysics.stomp_height(true)
+			+ PlayerPhysics.jump_height()})
+
 	for entity in m.entities:
 		if not (entity["type"] in ["platform_h", "platform_v"]):
 			continue
@@ -252,3 +272,16 @@ func _can_step_up_to(m: LevelMap, x: int, surface_y: float) -> bool:
 			continue
 		return true
 	return false
+
+
+## 站在這一列上時，關卡底部看得到嗎。
+##
+## 相機被 limit_top / limit_bottom 夾住（見 Player.set_camera_bounds），
+## 所以站得越高，畫面下緣露出的關卡就越少。這正是「盲跳致死」的成因：
+## 玩家站在第 6 列時關卡底部完全在畫面外，往右走一步就踩空。
+func _floor_is_visible_from(m: LevelMap, row: int) -> bool:
+	var half_view := float(ProjectSettings.get_setting(
+		"display/window/size/viewport_height")) * 0.5
+	var level_height := float(m.height) * TILE
+	var center := clampf(float(row) * TILE, half_view, level_height - half_view)
+	return center + half_view >= float(m.height - 1) * TILE
