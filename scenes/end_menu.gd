@@ -8,8 +8,9 @@ extends CanvasLayer
 
 signal chosen(action: String)
 
-const ACTIONS := ["facebook", "threads", "copy", "again"]
-const LABELS := ["分享到 Facebook", "分享到 Threads", "複製成績文字", "再玩一次"]
+const ACTIONS := ["facebook", "threads", "copy", "card", "again"]
+const LABELS := ["分享到 Facebook", "分享到 Threads", "複製成績文字",
+	"存成績卡圖片", "再玩一次"]
 const DEFAULT_ACTION := "again"
 
 const SELECTED_TINT := Color(1, 1, 1)
@@ -45,7 +46,7 @@ func _build_buttons() -> void:
 		var button := Button.new()
 		button.text = LABELS[i]
 		button.focus_mode = Control.FOCUS_NONE
-		button.custom_minimum_size = Vector2(250, 66)
+		button.custom_minimum_size = Vector2(208, 66)
 		button.add_theme_font_override("font", load(BUTTON_FONT))
 		button.add_theme_font_size_override("font_size", BUTTON_FONT_SIZE)
 		button.pressed.connect(_on_button_pressed.bind(i))
@@ -64,7 +65,7 @@ func show_result(cleared: bool, stats: RunStats) -> void:
 	if cleared and stats.flawless:
 		marks.append("全程無傷")
 	_detail.text = "　　".join(marks)
-	_share_preview.tooltip_text = "這張圖片就是分享到社群時使用的預覽圖"
+	_share_preview.tooltip_text = "這張成績卡就是你這一局的紀錄，存下來可以貼到 IG"
 	_note.text = ""
 	_index = ACTIONS.find(DEFAULT_ACTION)
 	_refresh()
@@ -80,6 +81,14 @@ func handle_action(event: InputEvent) -> void:
 	elif event.is_action_pressed("jump"):
 		Audio.play("menu_confirm")
 		chosen.emit(ACTIONS[_index])
+
+
+## 換上這一局的成績卡。以前這裡固定顯示三隻角色的合照，還配一行
+## 「社群分享預覽」——等於在按下分享之前就告訴玩家「你分享出去的跟你這局
+## 無關」。誠實，但直接殺掉分享動機。
+func set_card(texture: Texture2D) -> void:
+	if texture != null:
+		_share_preview.texture = texture
 
 
 func show_note(text: String) -> void:

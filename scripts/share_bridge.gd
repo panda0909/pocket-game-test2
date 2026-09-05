@@ -81,3 +81,48 @@ static func copy_to_clipboard(text: String) -> bool:
 })(%s);
 """ % JSON.stringify(text)
 	return JavaScriptBridge.eval(script, true) == true
+
+
+## 把一張 PNG 交給瀏覽器：能用原生分享就分享，否則存檔。
+##
+## 這是 Instagram 唯一可行的路徑——IG 不吃連結、只吃圖，而以前的「複製成績
+## 文字」貼到 IG 之後那串網址還不能點，等於白做。
+##
+## navigator.share 需要使用者手勢，而 Godot 在自己的幀迴圈處理輸入，可能已經
+## 離開那個堆疊（和 window.open 同一個老問題）。所以一定要有存檔備援，
+## 而且回傳值要說清楚走的是哪一條。
+static func share_image(png: PackedByteArray, text: String,
+		filename: String) -> String:
+	if png.is_empty():
+		return "empty"
+	if not is_available():
+		return "unsupported"
+	var script := """
+(function(b64, caption, name){
+  try {
+    var bin = atob(b64);
+    var bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) { bytes[i] = bin.charCodeAt(i); }
+    var blob = new Blob([bytes], { type: 'image/png' });
+    try {
+      var file = new File([blob], name, { type: 'image/png' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        navigator.share({ files: [file], text: caption });
+        return 'shared';
+      }
+    } catch (e) { /* 落到存檔 */ }
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+    return 'saved';
+  } catch (e) { return 'failed'; }
+})(%s, %s, %s);
+""" % [JSON.stringify(Marshalls.raw_to_base64(png)),
+	JSON.stringify(text), JSON.stringify(filename)]
+	var result: Variant = JavaScriptBridge.eval(script, true)
+	return str(result) if result != null else "failed"

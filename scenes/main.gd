@@ -40,6 +40,8 @@ var _main_map: LevelMap = null
 var _death_pending := false
 ## 關卡檔壞掉時停在標題並說明，不要讓玩家掉進沒有地形的虛空。
 var _level_broken := false
+## 這一局的成績卡 PNG。畫好之後才有得分享。
+var _card_png := PackedByteArray()
 
 @onready var _tiles: TileMapLayer = $Tiles
 @onready var _entities: Node2D = $Entities
@@ -50,6 +52,7 @@ var _level_broken := false
 @onready var _end_menu: EndMenu = $EndMenu
 @onready var _pause_menu: PauseMenu = $PauseMenu
 @onready var _touch: TouchControls = $TouchControls
+@onready var _score_card: ScoreCardView = $ScoreCard
 
 
 func _ready() -> void:
@@ -480,8 +483,28 @@ func _on_end_menu_chosen(action: String) -> void:
 				_end_menu.show_note("成績文字已複製，貼到 Instagram 就好")
 			else:
 				_end_menu.show_note("複製失敗，請手動選取下面這段文字：%s" % message)
+		"card":
+			_share_card(cleared, message)
 		"again":
 			_advance(Flow.AGAIN)
+
+
+## 存成績卡。這是 Instagram 唯一可行的路徑——IG 不吃連結、只吃圖，
+## 而「複製成績文字」貼到 IG 之後那串網址還不能點，等於白做。
+func _share_card(cleared: bool, message: String) -> void:
+	var outcome := ShareBridge.share_image(_card_png, message,
+		ScoreCard.filename(stats, cleared))
+	match outcome:
+		"shared":
+			_end_menu.show_note("已交給系統的分享面板，挑一個 App 貼出去")
+		"saved":
+			_end_menu.show_note("成績卡已存到下載資料夾，貼到 IG 就好")
+		"empty":
+			_end_menu.show_note("成績卡還在畫，等一下再按一次")
+		"unsupported":
+			_end_menu.show_note("這個版本不是網頁版，無法存成圖片")
+		_:
+			_end_menu.show_note("存檔失敗，瀏覽器可能擋住了下載")
 
 
 func _process(delta: float) -> void:
@@ -552,6 +575,7 @@ func _enter_state(state: int, event := "") -> void:
 			_hud.hide_message()
 			_record_run(false)
 			_end_menu.show_result(false, stats)
+			_build_score_card(false, 0)
 		Flow.CLEARED:
 			Audio.stop_music()
 			Audio.play("clear")
@@ -562,7 +586,22 @@ func _enter_state(state: int, event := "") -> void:
 			_hud.hide_message()
 			_record_run(true, time_at_goal)
 			_end_menu.show_result(true, stats)
+			_build_score_card(true, time_at_goal)
 	_hud.update_stats(stats, _player.state.is_big())
+
+
+## 把這一局畫成一張成績卡。
+##
+## 分享出去的預覽圖以前是固定的三隻角色合照——A 玩家通關拿 12340 分、
+## B 玩家開場就死，兩人貼到 Facebook 的東西一模一樣。動態牆上沒有任何
+## 個人化訊號，而那是社群傳播最致命的一種缺陷：分享的不是「我」的，
+## 是「它」的。
+func _build_score_card(cleared: bool, time_left: int) -> void:
+	_card_png = await _score_card.render_png(stats, character_index, cleared,
+		time_left)
+	# headless 或渲染器拿不到畫面時 png 是空的，那時就不換預覽圖。
+	if not _card_png.is_empty():
+		_end_menu.set_card(_score_card.get_texture())
 
 
 ## 把這一局記進最高分紀錄。
