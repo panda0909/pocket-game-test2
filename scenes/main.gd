@@ -300,7 +300,11 @@ func _return_to_level() -> void:
 func _on_checkpoint_reached(world_position: Vector2) -> void:
 	if _in_room:
 		return
+	var first := not _checkpoint.is_finite()
 	_checkpoint = world_position
+	# 檢查點是「死了不會太挫折」的核心保險，但玩家如果不知道它存在，
+	# 死亡時的心理成本仍然是「要從頭來」——會提早放棄。
+	_hud.flash_hint("檢查點　死了從這裡繼續" if first else "檢查點")
 	for node in get_tree().get_nodes_in_group("checkpoint"):
 		if is_ancestor_of(node) and node.global_position.is_equal_approx(world_position):
 			node.mark_taken()

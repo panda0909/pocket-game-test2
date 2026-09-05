@@ -14,6 +14,8 @@ signal hit_absorbed
 
 ## 移動、投擲與體型的數值全部在 BossRules，這裡只負責演出。
 const BODY_SIZE := BossRules.BODY_SIZE
+## boss.png 是 128x128，縮放到碰撞箱高度。
+const SPRITE_SOURCE_HEIGHT := 128.0
 const INVINCIBLE_TINT := Color(1.35, 1.35, 1.45)
 const DAMAGED_TINT := Color(2.4, 1.2, 1.2)
 
@@ -39,6 +41,8 @@ func _ready() -> void:
 	_origin_x = global_position.x
 	(_shape.shape as RectangleShape2D).size = BODY_SIZE
 	_shape.position.y = -half_height
+	# 貼圖跟著碰撞箱一起放大，不然圖會浮在一個看不見的大箱子裡。
+	_sprite.scale = Vector2.ONE * (BODY_SIZE.y / SPRITE_SOURCE_HEIGHT)
 	_sprite.position.y = -half_height
 	health_changed.emit(BossRules.health_ratio(hp))
 

@@ -13,7 +13,13 @@ const GRAVITY := 1400.0
 const WALK_SPEED := 90.0
 const PATROL_HALF_WIDTH := 192.0
 const THROW_INTERVAL := 2.5
-const BODY_SIZE := Vector2(96, 104)
+## Boss 的碰撞箱。大牛身高 168 px（120 × BIG_SCALE 1.4），所以 104 高的 Boss
+## 站在大牛旁邊比玩家還矮——關底的壓迫感整個沒了，而且牠和第 45 格的普通
+## 小熊是同一個造型只多一頂皇冠。放大到 198 之後才明顯比玩家大一截。
+##
+## 上限受制於踩踏：頭頂 = 地面 768 − 198 = 570，而從地面滿跳腳底到 532，
+## 還搆得到。再高就踩不到了。
+const BODY_SIZE := Vector2(182, 198)
 ## 瞄準玩家身體中段。
 const AIM_OFFSET := Vector2(0, 60)
 

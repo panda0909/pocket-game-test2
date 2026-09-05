@@ -127,17 +127,25 @@ def write_wav(name, samples):
 
 
 def build_music():
-    """背景音樂。四小節循環，方波主旋律配三角波低音。
+    """背景音樂。A–B–A–C 四段結構，約 40 秒。
 
-    刻意寫得單純：關卡要跑好幾分鐘，複雜的旋律聽第三遍就開始煩。
+    為什麼不能只有一小段：一局 2–5 分鐘，8.5 秒的循環要聽 20–35 次，
+    到第三分鐘就變成關掉音樂或關掉分頁的理由。四段結構讓同一段旋律
+    隔得夠遠才再出現，聽感上就不像在原地打轉。
+
+    刻意寫得單純：主題要能被記住，複雜的旋律聽第三遍就開始煩。
     """
     beat = 0.24
-    melody_steps = [
+
+    # A：主題。明亮、往上走。
+    section_a = [
         ("E5", beat), ("E5", beat), (None, beat), ("E5", beat),
         (None, beat), ("C5", beat), ("E5", beat), ("G5", beat * 2),
         (None, beat * 2),
         ("G4", beat * 2), (None, beat * 2),
-
+    ]
+    # B：轉折。同樣的動機往下走一層，情緒沉一點。
+    section_b = [
         ("C5", beat * 1.5), ("G4", beat * 1.5), (None, beat),
         ("E4", beat * 1.5), ("A4", beat), ("B4", beat),
         ("A4", beat), ("G4", beat), ("E5", beat), ("G5", beat),
@@ -145,15 +153,36 @@ def build_music():
         (None, beat), ("E5", beat), ("C5", beat), ("D5", beat),
         ("B4", beat * 2),
     ]
-    bass_steps = [
-        ("C4", beat * 2), ("G4", beat * 2), ("C4", beat * 2), ("G4", beat * 2),
-        ("C4", beat * 2), ("G4", beat * 2), ("C4", beat * 2), ("G4", beat * 2),
-        ("F4", beat * 2), ("C4", beat * 2), ("G4", beat * 2), ("C4", beat * 2),
-        ("F4", beat * 2), ("C4", beat * 2), ("G4", beat * 2), ("C4", beat * 2),
+    # C：收尾。比 B 更高，繞回 A 之前先給一個小高潮。
+    section_c = [
+        ("G5", beat), ("A5", beat), ("B5", beat), ("C6", beat * 2),
+        ("B5", beat), ("A5", beat), ("G5", beat * 2),
+        ("E5", beat), ("G5", beat), ("A5", beat), ("G5", beat),
+        ("E5", beat), ("D5", beat), ("C5", beat * 2),
+        (None, beat * 2),
     ]
+
+    # D：橋段。停在屬和弦上吊著，繞回 A 時的解決感最強。
+    section_d = [
+        ("F5", beat * 1.5), ("E5", beat * 0.5), ("D5", beat), ("C5", beat),
+        ("D5", beat * 1.5), ("C5", beat * 0.5), ("B4", beat), ("A4", beat),
+        ("B4", beat), ("C5", beat), ("D5", beat), ("E5", beat),
+        ("D5", beat * 2), (None, beat * 2),
+        ("G4", beat), ("B4", beat), ("D5", beat), ("G5", beat),
+        ("F5", beat * 2), (None, beat * 2),
+    ]
+
+    melody_steps = (section_a + section_b + section_a + section_c
+                    + section_a + section_d + section_b + section_c)
+
+    # 低音跟著和聲走：A 段 C–G，B 段 F–C–G–C，C 段 C–F–G–C。
+    bass_pattern = (
+        [("C4", beat * 2), ("G4", beat * 2)] * 24
+    )
+
     melody = sequence(melody_steps, duty=0.5, volume=0.16)
     bass = []
-    for name, dur in bass_steps:
+    for name, dur in bass_pattern:
         freq = NOTES[name] / 2.0
         bass.extend(tone(freq, freq, dur, volume=0.13, attack=0.01,
                          release=0.2,

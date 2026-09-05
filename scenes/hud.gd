@@ -114,6 +114,24 @@ func _refresh_boss_row() -> void:
 func _ready() -> void:
 	_boss_row.visible = false
 	_hint.modulate.a = 0.0
+	_style_boss_bar()
+
+
+## 血條用 Godot 內建的 ProgressBar 樣式時，滿血是一條純灰半透明的板子，
+## 背景的雲會透出來——新手的解讀是「載入進度條卡住了」。染成紅底黑框，
+## 它才讀得出是血量。
+func _style_boss_bar() -> void:
+	var track := StyleBoxFlat.new()
+	track.bg_color = Color(0.1, 0.11, 0.14, 0.85)
+	track.border_color = Color(0.85, 0.87, 0.92, 0.9)
+	track.set_border_width_all(2)
+	track.set_corner_radius_all(4)
+	_boss_bar.add_theme_stylebox_override("background", track)
+
+	var fill := StyleBoxFlat.new()
+	fill.bg_color = Color(0.86, 0.22, 0.24)
+	fill.set_corner_radius_all(3)
+	_boss_bar.add_theme_stylebox_override("fill", fill)
 	_stats_visible = _stats_row.visible
 
 
