@@ -1,12 +1,12 @@
 name: 盤面大道
-time: 300
+time: 150
 pipe1: level1_pipe_a
 ---
 
 
 
 
-                                                                                                                                                                             a                                                        oo
+                                                                                                                                                                                 a                                                    oo
                                                                                                                                                                            oooo
                                                                                                                                                                            =====                                  a
                                                                                                                ooo

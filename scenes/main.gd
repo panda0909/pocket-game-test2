@@ -438,7 +438,7 @@ func _on_end_menu_chosen(action: String) -> void:
 			else:
 				_end_menu.show_note("複製失敗，請手動選取下面這段文字：%s" % message)
 		"again":
-			_advance(Flow.RESTART)
+			_advance(Flow.AGAIN)
 
 
 func _process(delta: float) -> void:
@@ -492,10 +492,16 @@ func _enter_state(state: int, event := "") -> void:
 			Audio.play_music()
 			# 關卡名寫在關卡檔第一行，解析出來之後卻從來沒上過螢幕——
 			#「盤面大道」這個名字是股市主題最直接的一次表達，白放著可惜。
-			if event == Flow.CONFIRM and _map != null and not _map.level_name.is_empty():
+			if (event == Flow.CONFIRM or event == Flow.AGAIN) \
+					and _map != null and not _map.level_name.is_empty():
 				_hud.flash_hint(_map.level_name)
 			if event == Flow.DIED:
 				_respawn()
+			elif event == Flow.AGAIN:
+				# 一鍵重來：沿用同一隻角色，不再繞回標題與選角。
+				_hud.reset_cache()
+				_restart_run()
+				_player.respawn_at(_respawn_position())
 		Flow.GAME_OVER:
 			Audio.stop_music()
 			_hud.hide_message()

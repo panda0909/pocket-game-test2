@@ -458,9 +458,10 @@ func _check_end_menu_appears_and_navigates() -> void:
 
 	# 選「再玩一次」要回到標題
 	await _tap(KEY_SPACE)
-	_expect(main.flow_state == Flow.TITLE, "選再玩一次回到標題",
+	_expect(main.flow_state == Flow.PLAYING,
+		"選再玩一次直接回到遊戲，不繞標題與選角",
 		"flow_state=%d" % main.flow_state)
-	_expect(not menu.visible, "回到標題後選單收起來")
+	_expect(not menu.visible, "回到遊戲後結束選單收起來")
 	main.queue_free()
 	await get_tree().process_frame
 

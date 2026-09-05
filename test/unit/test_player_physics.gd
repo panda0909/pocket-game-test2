@@ -229,3 +229,34 @@ func test_coyote_time_can_be_overridden() -> void:
 func test_coyote_time_defaults_to_the_baseline() -> void:
 	var r := PlayerPhysics.step(Vector2.ZERO, _ipt(0.0), true, D, _timers())
 	assert_almost_eq(float(r["timers"]["coyote"]), PlayerPhysics.COYOTE_TIME, 0.001)
+
+
+# --- 迴轉 ---
+# 方向鍵反向推用的是 GROUND_ACCEL(1600)，鬆手煞停用 GROUND_BRAKE(2000)——
+# 於是「鬆手再按」比「直接反向」還快，熟練玩家會養成一個違反直覺的習慣。
+# 迴轉本身 0.525 秒也偏黏，那是全遊戲最像「不聽話」的地方。
+
+func _turn_time(from_speed: float) -> float:
+	var v := Vector2(from_speed, 0)
+	var t := _timers(PlayerPhysics.COYOTE_TIME)
+	var frames := 0
+	var dir := -signf(from_speed)
+	while frames < 600:
+		var r := PlayerPhysics.step(v, _ipt(dir), true, D, t)
+		v = r["velocity"]
+		t = r["timers"]
+		frames += 1
+		if signf(v.x) == dir or is_zero_approx(v.x):
+			break
+	return float(frames) * D
+
+func test_turning_around_is_faster_than_releasing_and_repressing() -> void:
+	var turn := _turn_time(PlayerPhysics.SPRINT_SPEED)
+	# 鬆手再按：先用煞停加速度歸零，再用一般加速度起步
+	var release := PlayerPhysics.SPRINT_SPEED / PlayerPhysics.GROUND_BRAKE
+	assert_lt(turn, release,
+		"直接反向要比鬆手再按快，否則玩家會養成鬆手的怪習慣")
+
+func test_turning_around_is_not_sluggish() -> void:
+	assert_lt(_turn_time(PlayerPhysics.SPRINT_SPEED), 0.40,
+		"從衝刺速度迴轉不該超過 0.4 秒")

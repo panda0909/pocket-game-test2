@@ -20,6 +20,13 @@ const MAX_RUN_SPEED := 280.0
 const SPRINT_SPEED := 420.0
 const GROUND_ACCEL := 1600.0
 const GROUND_BRAKE := 2000.0
+## 迴轉（推的方向和目前速度相反）用的加速度。
+##
+## 一定要比 GROUND_BRAKE 大。以前反向推用 GROUND_ACCEL(1600)、鬆手煞停用
+## GROUND_BRAKE(2000)，於是「鬆手再按」比「直接反向」還快 0.05 秒——熟練
+## 玩家一定會發現，然後養成一個違反直覺的操作習慣。而 0.26 秒的迴轉本身
+## 也偏黏，那是全遊戲最像「不聽話」的地方。
+const TURN_ACCEL := 2600.0
 const AIR_ACCEL := 1100.0
 const JUMP_VELOCITY := -720.0
 const GRAVITY_RISE := 1100.0
@@ -59,6 +66,10 @@ static func step(velocity: Vector2, input: Dictionary, on_floor: bool,
 
 	if not is_zero_approx(dir):
 		var accel := GROUND_ACCEL if on_floor else AIR_ACCEL
+		# 推的方向和現在的速度相反＝迴轉，用更大的加速度收回來。
+		if on_floor and not is_zero_approx(new_velocity.x) \
+				and signf(new_velocity.x) != signf(dir):
+			accel = TURN_ACCEL
 		var top_speed := sprint_speed if sprint else MAX_RUN_SPEED
 		# 放開衝刺時 move_toward 會用同一組加速度把速度收回走路上限，
 		# 所以鬆手是自然減速，不是瞬間掉一截。

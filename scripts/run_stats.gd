@@ -17,7 +17,12 @@ const MILK_FIRST_SCORE := 500
 ## 已經是大牛時再拿一塊。零風險的重複收集，不該是全關第二大的單筆收益
 ## （僅次於 Boss 的 3000），否則刷分的最優解就是繞回去重拿。
 const MILK_BONUS_SCORE := 200
-const TIME_BONUS_PER_SECOND := 10
+## 通關時每剩一秒換多少分。
+##
+## 10 分/秒太低：三條支線的收益換算成時間單價是 100–130 分/秒，差一個
+## 數量級，於是「全收集 vs 衝時間」根本不是取捨——全收集無條件輾壓。
+## 40 分/秒讓兩邊的量級對得上，取捨才第一次成立。
+const TIME_BONUS_PER_SECOND := 40
 const START_LIVES := 3
 const MAX_LIVES := 9
 ## 每跨過這個分數送一條命。沒有補命管道的話，15 個畫面的關卡配 3 條命、

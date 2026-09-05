@@ -12,7 +12,14 @@ const CONFIRM := "confirm"
 const BACK := "back"
 const DIED := "died"
 const GOAL := "goal"
+## 回標題（想換角色，或暫停選單的「放棄這局」）。
 const RESTART := "restart"
+## 直接再玩一次，沿用同一隻角色。
+##
+## 以前「再玩一次」也走 RESTART 回標題，玩家要再按空白、再過選角、再按
+## 空白才回到遊戲——刷分產品的核心指標是「一個 session 玩幾次」，每多一個
+## 中間畫面，第二次遊玩的轉換率就掉一截。
+const AGAIN := "again"
 
 const TITLE := 0
 const PLAYING := 1
@@ -39,6 +46,8 @@ static func next(state: int, event: String, lives_left: int) -> int:
 				GOAL:
 					return CLEARED
 		GAME_OVER, CLEARED:
+			if event == AGAIN:
+				return PLAYING
 			if event == RESTART:
 				return TITLE
 	return state
