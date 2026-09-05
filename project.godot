@@ -30,6 +30,7 @@ buses/default_bus_layout="res://assets/default_bus_layout.tres"
 [autoload]
 
 Audio="*res://scenes/audio.gd"
+Telemetry="*res://scenes/telemetry.gd"
 
 [display]
 

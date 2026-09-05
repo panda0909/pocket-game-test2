@@ -86,6 +86,40 @@ EXTRA_BODY = """<div id="rotate-hint">
 EXTRA_TITLE = """			<div id="loading-title">口袋牛牛大冒險<small id="loading-pct">載入中…</small></div>
 """
 
+TELEMETRY_HOOK = """
+<script>
+// --- 由 tools/patch_web_shell.py 加入 ---
+//
+// 遊戲會在六個時間點呼叫 window.pocketGameEvent(name, props)：
+//
+//   loaded               撐過載入、看到標題畫面      { touch }
+//   start_pressed        按下開始
+//   character_confirmed  選好角色                   { index }
+//   checkpoint           走到檢查點                 { cell }
+//   cleared              通關    { score, coins, collect_pct, time_left, flawless, cell }
+//   game_over            三條命用完                 （同上）
+//   share_clicked        按了分享                   { platform }
+//
+// 這六個事件就能畫出完整的漏斗：多少人撐過載入、多少人真的開始玩、
+// 卡在第幾格、多少人通關、多少人分享。
+//
+// 預設什麼都不做——埋點會把資料送出使用者的瀏覽器，那是需要專案擁有者
+// 明確同意的決定，不是可以預設開啟的功能。要接的話取消底下其中一段的
+// 註解，或自己寫。遊戲端已經保證只會送出白名單裡的欄位、而且值只有
+// 數字或短字串（見 scripts/telemetry_events.gd）。
+window.pocketGameEvent = function (name, props) {
+	// 開發時想看事件流，取消這一行的註解：
+	// console.log('[pocket]', name, props);
+
+	// --- Plausible（自架或雲端；把 script 標籤加到 <head> 之後）---
+	// if (window.plausible) { window.plausible(name, { props: props }); }
+
+	// --- GA4（先載入 gtag.js 並設定好評估 ID）---
+	// if (window.gtag) { window.gtag('event', name, props); }
+};
+</script>
+"""
+
 PROGRESS_PATCH = """				if (current > 0 && total > 0) {
 					statusProgress.value = current;
 					statusProgress.max = total;
@@ -115,6 +149,16 @@ def patch(path: str) -> int:
         print("已套用：%s" % label)
 
     # 載入標題要放在 #status 裡面，才會跟著一起隱藏
+    if "pocketGameEvent" in html:
+        print("HTML 殼裡已經有 pocketGameEvent，跳過埋點掛鉤")
+    else:
+        script_anchor = '<script src="index.js"></script>'
+        if script_anchor not in html:
+            print("找不到 index.js 的 script 標籤，無法插入埋點掛鉤")
+            return 1
+        html = html.replace(script_anchor, TELEMETRY_HOOK + "\t\t" + script_anchor, 1)
+        print("已套用：埋點掛鉤（預設不送到任何地方）")
+
     anchor = '<div id="status-notice"></div>'
     if anchor not in html:
         print("找不到 status-notice，無法插入載入標題")

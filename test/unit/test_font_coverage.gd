@@ -74,10 +74,16 @@ func _files_under(path: String) -> Array:
 
 ## 註解不會出現在畫面上，掃描時要略過——否則寫一段解釋用的中文註解
 ## 就會逼字型子集把那些字也收進去，子集會越滾越大而且沒有理由。
+## 也略過 push_error / push_warning / print——那些字進的是主控台，不是畫面。
 func _without_comments(text: String) -> String:
 	var kept: PackedStringArray = []
 	for line in text.split("\n"):
-		if line.strip_edges().begins_with("#"):
+		var trimmed := line.strip_edges()
+		if trimmed.begins_with("#"):
+			continue
+		# 主控台輸出不會出現在畫面上。
+		if trimmed.begins_with("push_error(") or trimmed.begins_with("push_warning(") \
+				or trimmed.begins_with("print("):
 			continue
 		kept.append(line)
 	return "\n".join(kept)

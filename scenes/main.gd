@@ -67,6 +67,9 @@ func _ready() -> void:
 	_pause_menu.resumed.connect(_on_resumed)
 	_pause_menu.quit_to_title.connect(_on_quit_to_title)
 	_enter_state(Flow.TITLE)
+	# 漏斗的第一格：撐過載入、真的看到標題畫面的人。
+	Telemetry.send(TelemetryEvents.LOADED,
+		{"touch": TouchControls.should_show()})
 
 
 ## 載入一張關卡，回傳是否成功。
@@ -327,6 +330,8 @@ func _on_checkpoint_reached(world_position: Vector2) -> void:
 	# 檢查點是「死了不會太挫折」的核心保險，但玩家如果不知道它存在，
 	# 死亡時的心理成本仍然是「要從頭來」——會提早放棄。
 	_hud.flash_hint("檢查點　死了從這裡繼續" if first else "檢查點")
+	Telemetry.send(TelemetryEvents.CHECKPOINT,
+		{"cell": int(world_position.x / TILE)})
 	for node in get_tree().get_nodes_in_group("checkpoint"):
 		if is_ancestor_of(node) and node.global_position.is_equal_approx(world_position):
 			node.mark_taken()
@@ -435,6 +440,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not event.is_action_pressed("jump"):
 		return
 	if flow_state == Flow.TITLE and not _level_broken:
+		Telemetry.send(TelemetryEvents.STARTED)
 		_advance(Flow.START)
 
 
@@ -454,6 +460,7 @@ func _on_select_moved(direction: int) -> void:
 
 
 func _on_select_confirmed() -> void:
+	Telemetry.send(TelemetryEvents.CHARACTER, {"index": character_index})
 	_player.set_character(character_index)
 	_advance(Flow.CONFIRM)
 
@@ -464,7 +471,22 @@ func _on_select_cancelled() -> void:
 
 ## 結束畫面的四個動作。分享失敗時明說，不假裝成功——
 ## 瀏覽器擋彈出視窗或不給剪貼簿權限都是常見情況。
+## 一局結束時值得知道的數字。走 TelemetryEvents.sanitize 的白名單，
+## 這裡多傳什麼也送不出去。
+func _run_props(time_left: int) -> Dictionary:
+	return {
+		"score": stats.score,
+		"coins": stats.found["coin"],
+		"collect_pct": stats.collect_percent(),
+		"time_left": time_left,
+		"flawless": stats.flawless,
+		"cell": int(_player.global_position.x / TILE),
+	}
+
+
 func _on_end_menu_chosen(action: String) -> void:
+	if action != "again":
+		Telemetry.send(TelemetryEvents.SHARED, {"platform": action})
 	var cleared := flow_state == Flow.CLEARED
 	var message := ShareText.full_message(stats, character_index, cleared)
 	match action:
@@ -576,6 +598,7 @@ func _enter_state(state: int, event := "") -> void:
 			_record_run(false)
 			_end_menu.show_result(false, stats)
 			_build_score_card(false, 0)
+			Telemetry.send(TelemetryEvents.GAME_OVER, _run_props(0))
 		Flow.CLEARED:
 			Audio.stop_music()
 			Audio.play("clear")
@@ -587,6 +610,7 @@ func _enter_state(state: int, event := "") -> void:
 			_record_run(true, time_at_goal)
 			_end_menu.show_result(true, stats)
 			_build_score_card(true, time_at_goal)
+			Telemetry.send(TelemetryEvents.CLEARED, _run_props(time_at_goal))
 	_hud.update_stats(stats, _player.state.is_big())
 
 

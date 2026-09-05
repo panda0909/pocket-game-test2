@@ -9,7 +9,7 @@ extends Node
 ## 而誤判為通過。
 
 ## 至少要跑到這麼多項檢查。加新檢查時把它調高。
-const MIN_CHECKS := 125
+const MIN_CHECKS := 135
 
 var _passed := 0
 var _failed := 0
@@ -66,6 +66,7 @@ func _ready() -> void:
 	await _check_collect_percent_tracks_progress()
 	await _check_flawless_survives_respawn()
 	await _check_end_menu_shows_collection()
+	await _check_telemetry_rejects_unknown_events()
 
 	print("---")
 	# 檢查總數也要守。單看「失敗 0」看不出有沒有檢查憑空消失——
@@ -1349,4 +1350,19 @@ func _check_end_menu_shows_collection() -> void:
 	_expect(detail.text.contains("收集率"),
 		"結束畫面顯示收集率", "實際是「%s」" % detail.text)
 	main.queue_free()
+	await get_tree().process_frame
+
+
+## 埋點：認不得的事件名要被擋下來，而且非網頁環境什麼都不送。
+##
+## 打錯字的事件如果照送，報表上那個事件永遠是 0 而且不會有人發現——
+## 和 Flow 的魔法字串是同一類問題。
+func _check_telemetry_rejects_unknown_events() -> void:
+	_expect(not Telemetry.send("clearedd"), "認不得的事件名不會被送出去")
+	for name in TelemetryEvents.names():
+		_expect(TelemetryEvents.sanitize_name(name) == name,
+			"事件 %s 在白名單裡" % name)
+	# headless 不是網頁，所以就算名稱正確也不會真的送
+	_expect(not Telemetry.send(TelemetryEvents.LOADED),
+		"非網頁環境不送埋點")
 	await get_tree().process_frame

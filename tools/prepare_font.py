@@ -63,9 +63,10 @@ def scan_characters() -> set:
                     text = text.split("---")[0]
                 # 註解不會出現在畫面上。寫一段解釋用的中文註解不該逼子集
                 # 把那些字也收進去——子集會越滾越大而且沒有理由。
+                skip = ("#", "push_error(", "push_warning(", "print(")
                 text = "\n".join(
                     line for line in text.split("\n")
-                    if not line.lstrip().startswith("#"))
+                    if not line.lstrip().startswith(skip))
                 for literal in STRING_LITERAL.findall(text):
                     found.update(literal)
     return found
